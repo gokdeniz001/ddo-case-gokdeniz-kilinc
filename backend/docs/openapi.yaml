@@ -1,0 +1,151 @@
+openapi: 3.0.3
+info:
+  title: SiteYönet API
+  description: Çok kiracılı (multi-tenant) site, apartman ve aidat yönetim sistemi API dokümantasyonu.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Yerel Geliştirme ve Docker Ortamı
+
+paths:
+  /health:
+    get:
+      summary: Genel Sağlık Kontrolü
+      responses:
+        '200':
+          description: Sistem ve veritabanı sağlıklı
+
+  /_hz/0c7c:
+    get:
+      summary: DDO Özel Sağlık Ucu
+      responses:
+        '200':
+          description: OK 0c7c
+
+  /api/v1/auth/login:
+    post:
+      summary: Kullanıcı Girişi ve JWT Üretimi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Başarılı giriş, JWT token döner
+        '401':
+          description: Hatalı e-posta veya parola
+
+  /api/v1/units:
+    get:
+      summary: Daire ve Kat Mülkiyeti Bilgilerini Listele
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Daire listesi
+
+  /api/v1/accruals:
+    post:
+      summary: T-1 En Büyük Kalan Yöntemi ile Tahakkuk Dağıtımı
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [period_id, title, term_month, distribution_type, total_amount_cents]
+              properties:
+                period_id:
+                  type: string
+                  format: uuid
+                title:
+                  type: string
+                term_month:
+                  type: string
+                  example: "2026-11"
+                distribution_type:
+                  type: string
+                  enum: [LAND_SHARE, EQUAL, AREA_M2, RESIDENT_COUNT]
+                total_amount_cents:
+                  type: integer
+                  description: Kuruş cinsinden toplam gider tutarı
+      responses:
+        '201':
+          description: Tahakkuk ve daire borçları oluşturuldu
+
+  /api/v1/bank-statements/match:
+    post:
+      summary: T-2 Banka Dekontu Bulanık Eşleştirme (Levenshtein + Regex)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [raw_description]
+              properties:
+                raw_description:
+                  type: string
+                  example: "A BLOK NO: 5 AHMET YILMAZ AIDAT"
+      responses:
+        '200':
+          description: Eşleşen daire ve güven skoru
+
+  /api/v1/payments:
+    post:
+      summary: T-2 Tahsilat İşleme ve Waterfall Mahsup (Faiz -> Anapara -> FIFO)
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [unit_id, amount_cents]
+              properties:
+                unit_id:
+                  type: string
+                  format: uuid
+                amount_cents:
+                  type: integer
+      responses:
+        '201':
+          description: Ödeme tahsis edildi, borçlar güncellendi
+
+  /api/v1/certificates/verify/{code}:
+    get:
+      summary: T-4 'Borcu Yoktur' Belgesi Kriptografik Doğrulama
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Belge geçerlilik durumu ve SHA-256 hash doğrulaması
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
