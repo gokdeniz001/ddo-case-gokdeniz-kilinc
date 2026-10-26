@@ -63,7 +63,7 @@ Değişiklikler yereldedir; bu çalışma GitHub'a push veya teslim anketi gönd
 3. Fazla ödeme avans olarak tutulur; sonraki tahakkuka otomatik tüketilmez. Bütçe site bazındadır, dönem bazında sürümlenmez.
 4. CSV içe aktarma daire önerir; otomatik para tahsilatı yaratmaz. Belirsiz satır elle incelenir. Mutabakat raporu yalnızca içeri alınmış ekstre kapsamıyla karşılaştırma yapar.
 5. Aynı seed aynı iş verisini üretir; UUID, bcrypt salt ve oluşturulma zamanları aynı olmaz. Yazmalar site bazında sıralandığı için yazma kapasitesi sınırsız değildir; k6 sonucu okuma/dekont yükünü ölçer.
-6. Güncellenen GitHub Actions'a Compose tam kabul işi eklendi; bu değişikliğin uzak CI sonucu henüz oluşmadı.
+6. GitHub Actions backend test/lint, frontend build ve Compose tam kabul işleri başarılıdır: [653d51d çalıştırması](https://github.com/gokdeniz001/ddo-case-gokdeniz-kilinc/actions/runs/40388588332).
 
 ## Teslim adımları
 

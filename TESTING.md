@@ -42,8 +42,8 @@ Bu komut aşağıdaki tüm kimlikleri sırayla dener ve terminale `PASS` / `FAIL
 | **`HEALTH`** | Genel Sağlık Kontrolü | `GET http://localhost:8080/health` | `HTTP 200` + `{"status":"healthy","database":"connected"}` |
 | **`DDO-HZ`** | DDO Özel Sağlık Ucu | `GET http://localhost:8080/_hz/0c7c` | `HTTP 200 OK` (Body: `OK 0c7c`) |
 | **`DDO-HDR`** | DDO Özel HTTP Başlığı | Herhangi bir API yanıtı | Her HTTP yanıtında `X-DDO-Build: 0c7cc1` başlığı var |
-| **`AUTH-FAIL`**| Hatalı Parola Girişi | `POST /api/v1/auth/login` (yanlış parola) | `HTTP 401 Unauthorized` |
-| **`AUTH-RBAC`**| Yetki İhlali Senaryosu | Daire sakini tokenı ile `POST /api/v1/dues-definitions` | `HTTP 403 Forbidden` |
+| **`AUTH-4`**| Hatalı Parola Girişi | `POST /api/v1/auth/login` (yanlış parola) | `HTTP 401 Unauthorized` |
+| **`AUTH-5`**| Yetki İhlali Senaryosu | Daire sakini tokenı ile `POST /api/v1/dues-definitions` | `HTTP 403 Forbidden` |
 | **`F-1`** | Site, Blok ve Daire | `GET /api/v1/units` (Yönetici) | Bloklar, kat mülkiyeti arsa payları ve sakinler listelenir |
 | **`F-2`** | Aidat Tanımı & Tahakkuk | `GET /api/v1/dues-definitions` | Tanımlı aidat şablonları listelenir |
 | **`F-3`** | Tahsilat & Borç Takibi | `GET /api/v1/debts` | Borç kalemleri, ödenen ve kalan tutarlar listelenir |
@@ -52,15 +52,15 @@ Bu komut aşağıdaki tüm kimlikleri sırayla dener ve terminale `PASS` / `FAIL
 | **`F-6`** | Muhasebe Defteri | `GET /api/v1/periods` & `/journal-entries` | Mali dönemler ve çift taraflı yevmiye fişleri gelir |
 | **`F-7`** | Raporlar & Belge | `GET /api/v1/reports/summary` | Tahsilat oranı, net nakit akışı ve kasa durumu gelir |
 | **`T-1`** | **Tahakkuk Motoru** | `POST /api/v1/accruals` (küsuratlı tutar) | En Büyük Kalan Yöntemi ile kuruşu kuruşuna tam eşit dağıtılır |
-| **`T-2`** | **Tahsilat & Dekont** | `POST /api/v1/bank-statements/match` | Hatalı açıklamadan daire Levenshtein ile bulunur, FIFO tahsis edilir |
+| **`T-2`** | **Tahsilat & Dekont** | `POST /api/v1/bank-statements/match` | Açıklamadan daire önerilir; ayrı tahsilat isteği faiz → anapara / FIFO tahsis eder |
 | **`T-3`** | **Veri İzolasyonu (RLS)**| Sakin/Denetçi ile `GET /api/v1/debts` | Daire sakini başkasını göremez; Denetçi INSERT yapamaz (403) |
-| **`T-4`** | **Muhasebe & Belge** | `GET /api/v1/certificates/verify/:code` | Borcu olan daireye belge verilmez; verilen belge SHA-256 ile doğrulanır |
+| **`T-4`** | **Muhasebe & Belge** | `GET /api/v1/certificates/verify/:code` | Borcu olan daireye belge verilmez; verilen belge HMAC-SHA256 ile doğrulanır |
 
 ---
 
 ## 4. Zorlu Görevler İçin Kanıt Komutları
 
-Her zorlu görevin matematiksel ve mimari olarak çalıştığını kanıtlayan komutlar:
+Aşağıdaki Go komutları PostgreSQL bağlantısını içeren `DATABASE_URL` ile çalıştırılır. Go kurulu değilse `make verify` aynı testleri Docker içinde çalıştırır. Kapsam sınırları README’de belirtilmiştir.
 
 ### Görev 1 (T-1) Kanıt Komutu: Kuruşu Kuruşuna Dağıtım ve Prorata
 ```bash
@@ -76,19 +76,19 @@ cd backend && go test -v -run "TestT2" ./tests/...
 
 ### Görev 3 (T-3) Kanıt Komutu: PostgreSQL RLS Çok Kiracılı İzolasyon
 ```bash
-cd backend && go test -v -run "TestT3" ./tests/...
+cd backend && go test -v -run "TestIntegration_.*Privacy|TestIntegration_RLS|TestIntegration_Auditor|TestIntegration_CrossSite|TestIntegration_MultiSite" ./tests/...
 ```
 *Kanıt:* Daire sakininin komşusunun borcunu göremediğini ve denetçinin `INSERT` denemesinde veritabanı seviyesinde `Permission Denied` aldığını kanıtlar.
 
 ### Görev 4 (T-4) Kanıt Komutu: Çift Taraflı Muhasebe & Kriptografik Belge
 ```bash
-cd backend && go test -v -run "TestT4" ./tests/...
+cd backend && go test -v -run "TestT4|TestIntegration_Closed|TestIntegration_Certificate" ./tests/...
 ```
-*Kanıt:* Borç = Alacak dengesi bozuk kaydın reddedildiğini, borcu olan daireye sertifika verilmediğini ve SHA-256 hash bütünlüğünü kanıtlar.
+*Kanıt:* Borç = Alacak dengesi bozuk kaydın reddedildiğini, borcu olan daireye sertifika verilmediğini ve HMAC-SHA256 imza bütünlüğünü kanıtlar.
 
 ### Eşzamanlılık (Concurrency) Yarış Durumu Kanıt Komutu
 ```bash
-cd backend && go test -v -run "TestConcurrency" ./tests/...
+cd backend && go test -v -race -run "TestIntegration_ConcurrentPayments|TestIntegration_IdempotencyConcurrentSameKey" ./tests/...
 ```
 
 ---
@@ -104,7 +104,7 @@ cd backend && go test -v -run "TestConcurrency" ./tests/...
 5. Sol alt panelden **"🔍 Denetçi"** rolüne geçin.
    - Tüm finansal raporları ve yevmiye kayıtlarını görebildiğinizi, ancak yeni gider veya tahakkuk ekleme yetkinizin olmadığını teyit edin.
 6. Sol menüden **"'Borcu Yoktur' Belgesi (T-4)"** sekmesine gidin.
-   - Borcu 0 olan bir daire seçip **"Belgeyi İmzala ve Üret"** butonuna basın. Üretilen doğrulama kodunu yandaki kutuya yapıştırıp **"Doğrula"** butonuna basın. SHA-256 kriptografik yeşil onay rozetini görün.
+   - Borcu 0 olan bir daire seçip **"Borç Kontrolü Yap & Belge Üret"** butonuna basın. Üretilen doğrulama kodunu yandaki kutuya yapıştırıp **"Doğrula"** butonuna basın. Belgenin geçerli olduğuna ilişkin sonucu görün. Belge oluşturmak için yönetici rolüne dönün; borçlu dairede talebin reddedilmesi beklenir.
 
 
 ## 26 Ekim 2026 teslim öncesi doğrulama güncellemesi

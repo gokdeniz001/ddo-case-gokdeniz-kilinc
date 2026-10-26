@@ -18,7 +18,7 @@ Site ve apartman yönetim sistemlerinde aidat tahakkukları, gecikme zamları ve
 Tüm veritabanı şemasında ve backend domain modellerinde para tutarları kesin olarak **int64 (BIGINT)** kuruş olarak tutulacaktır. Arayüz ve raporlama katmanında sadece gösterim esnasında 100'e bölünerek biçimlendirilir.
 
 ### Sonuçlar
-- **Artılar:** Sıfır yuvarlama hatası; CPU üzerinde en hızlı tamsayı aritmetiği; taşma koruması (int64 92 katrilyon kuruşa kadar destekler).
+- **Artılar:** Sıfır yuvarlama hatası; CPU üzerinde en hızlı tamsayı aritmetiği; int64 üst sınırı 9.223.372.036.854.775.807 kuruştur; bu sınır aritmetik taşmayı kendiliğinden engellemez.
 - **Eksiler:** İstemci ve sunucu arasında veri taşınırken formatlama fonksiyonlarına ihtiyaç duyulur.
 
 ---
@@ -56,7 +56,7 @@ Toplam 10.000,00 TL'lik bir ortak gider 3 daireye eşit dağıtıldığında dai
 Tahakkuk motorunda (Task 1) **En Büyük Kalan Yöntemi** uygulanmıştır. Her dairenin teorik payı hesaplanır, taban kuruş atanır; kalan kuruşlar ise küsuratı en büyük olan dairelere sıralı dağıtılır.
 
 ### Sonuçlar
-- **Artılar:** `sum(allocated_cents) == total_cents` eşitliği %100 matematiksel olarak garanti edilir. Matematiksel olarak kanıtlanmış en adil seçim sistemidir.
+- **Artılar:** `sum(allocated_cents) == total_cents` eşitliği %100 matematiksel olarak garanti edilir. Kalan kuruşların dağıtım kuralı açık ve tekrarlanabilirdir.
 - **Eksiler:** Dağıtım öncesinde sıralama (sort) maliyeti vardır (küçük listelerde ihmal edilebilir).
 
 ---
@@ -74,24 +74,24 @@ Geleneksel apartman programları sadece tek taraflı gelir-gider listesi tutar. 
 Tekdüzen Hesap Planına uygun Çift Taraflı Muhasebe Defteri (`fy-journal-entries`, `fy-journal-lines`, `fy-ledger-accounts`) seçilmiştir. Dönem kapandığında `status = 'CLOSED'` yapılır ve veritabanı/uygulama seviyesinde yeni kayıt engellenir. Düzeltmeler zorunlu olarak ters kayıt fişi (Reversal Entry) açılarak yapılır.
 
 ### Sonuçlar
-- **Artılar:** Kurumsal muhasebe denetimine hazır mimari; değiştirilemez denetim izi (audit trail); kasa ve banka mutabakatı tam uyumlu.
+- **Artılar:** Dengeli yevmiye kayıtları ve dönem kilidi; mutabakat içe aktarılmış ekstrelerle sınırlıdır.
 
 
-## ADR 4 — İstek boyunca PostgreSQL işlemi ve RLS rolü
+## ADR-005: İstek boyunca PostgreSQL işlemi ve RLS rolü
 
 Bağlam: İlk sürümde havuz sorguları PostgreSQL süper kullanıcısıyla çalışıyor, RLS dosyaları gerçek API sorgularını korumuyordu.
 Seçenekler: Yalnızca WHERE site_id filtreleri, her sorguya ayrı işlem, istek boyunca tek işlem.
 Karar: Korunan istekte SET LOCAL ROLE siteyonet_runtime; site/kullanıcı/rol ayarları transaction-local. Tüm sorgular aynı işlemden geçer. HTTP yanıtı commit sonrasına kadar tamponlanır.
 Sonuç: RLS, havuza geri dönen bağlantılarda bağlam taşımadan çalışır. İşlem başarısızsa başarı yanıtı gönderilmez. Uzun yanıtlar bellekte tutulur; akış API'si amaçlanmamıştır.
 
-## ADR 5 — Site yazma kilidi ve kalıcı idempotans
+## ADR-006: Site yazma kilidi ve kalıcı idempotans
 
 Bağlam: Borç okuma ile ödeme yazma arasındaki yarış kayıp güncelleme oluşturabiliyordu; bellek önbelleği yeniden başlatmada kayboluyordu.
 Seçenekler: Satır kilitleri, serializable/retry, site bazlı transaction advisory lock.
 Karar: Bu demo için site bazlı yazma kilidi; iş etkisi ile idempotans yanıtı aynı PostgreSQL işleminde. Anahtar farklı istek gövdesi/yol/kullanıcı ile tekrar kullanılırsa 409.
 Sonuç: Aynı siteye yazmalar sıralanır, farklı siteler bağımsızdır. Yazma throughput'u bilinçli olarak sınırlanır. Sekiz paralel farklı ödeme ve sekiz aynı anahtarlı ödeme gerçek PostgreSQL testleriyle doğrulanır.
 
-## ADR 6 — Kuruş hesabında rasyonel sayılar ve liste sayfalama
+## ADR-007: Kuruş hesabında rasyonel sayılar ve liste sayfalama
 
 Bağlam: Para dağıtımındaki kayan nokta ara hesapları ve sınırsız borç listeleri doğruluk/performans riski oluşturuyordu.
 Seçenekler: float64, sabit ölçekli tamsayılar, math/big.Rat; offset veya imleç sayfalama.
