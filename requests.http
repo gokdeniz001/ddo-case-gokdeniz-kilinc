@@ -1,0 +1,215 @@
+### ==============================================================================
+### SiteYönet — VS Code REST Client & HTTP Deneme Koleksiyonu
+### ==============================================================================
+@baseUrl = http://localhost:8080
+@contentType = application/json
+
+### 1. Sağlık Kontrolü (Health Check)
+GET {{baseUrl}}/health HTTP/1.1
+
+### 2. DDO Özel Sağlık Ucu (Zorunlu Gereksinim 4)
+GET {{baseUrl}}/_hz/0c7c HTTP/1.1
+
+### ------------------------------------------------------------------------------
+### KİMLİK DOĞRULAMA (AUTH)
+### ------------------------------------------------------------------------------
+
+### 3. Yönetici Girişi (Manager Login)
+# @name managerLogin
+POST {{baseUrl}}/api/v1/auth/login HTTP/1.1
+Content-Type: {{contentType}}
+
+{
+  "email": "yonetici@siteyonet.com",
+  "password": "password123"
+}
+
+### Token yakalama
+@managerToken = {{managerLogin.response.body.token}}
+
+### 4. Daire Maliki Girişi (Resident Login)
+# @name residentLogin
+POST {{baseUrl}}/api/v1/auth/login HTTP/1.1
+Content-Type: {{contentType}}
+
+{
+  "email": "malik@siteyonet.com",
+  "password": "password123"
+}
+
+@residentToken = {{residentLogin.response.body.token}}
+
+### 5. Denetim Kurulu Girişi (Auditor Login)
+# @name auditorLogin
+POST {{baseUrl}}/api/v1/auth/login HTTP/1.1
+Content-Type: {{contentType}}
+
+{
+  "email": "denetim@siteyonet.com",
+  "password": "password123"
+}
+
+@auditorToken = {{auditorLogin.response.body.token}}
+
+### 6. Hatalı Parola ile Giriş (401 Unauthorized Beklenir)
+POST {{baseUrl}}/api/v1/auth/login HTTP/1.1
+Content-Type: {{contentType}}
+
+{
+  "email": "yonetici@siteyonet.com",
+  "password": "wrong-password"
+}
+
+### ------------------------------------------------------------------------------
+### F-1: SİTE, BLOK VE DAİRE KAYITLARI
+### ------------------------------------------------------------------------------
+
+### 7. Daireleri Listele
+GET {{baseUrl}}/api/v1/units HTTP/1.1
+Authorization: Bearer {{managerToken}}
+
+### 8. Blokları Listele
+GET {{baseUrl}}/api/v1/blocks HTTP/1.1
+Authorization: Bearer {{managerToken}}
+
+### ------------------------------------------------------------------------------
+### F-2 & T-1: AİDAT VE TAHAKKUK MOTORU (LARGEST REMAINDER METHOD)
+### ------------------------------------------------------------------------------
+
+### 9. Mali Dönemleri Listele
+# @name getPeriods
+GET {{baseUrl}}/api/v1/periods HTTP/1.1
+Authorization: Bearer {{managerToken}}
+
+@periodId = {{getPeriods.response.body.0.id}}
+
+### 10. Yeni Tahakkuk Başlat (Kuruşu Kuruşuna Dağıtım - T-1)
+POST {{baseUrl}}/api/v1/accruals HTTP/1.1
+Authorization: Bearer {{managerToken}}
+Content-Type: {{contentType}}
+
+{
+  "period_id": "{{periodId}}",
+  "title": "2026 Kasım Ayı Ortak Gider Tahakkuku",
+  "term_month": "2026-11",
+  "distribution_type": "LAND_SHARE",
+  "total_amount_cents": 1543217,
+  "due_day": 15
+}
+
+### ------------------------------------------------------------------------------
+### F-3 & T-2: TAHSİLAT, MAHSUP VE BULANIK EŞLEŞTİRME
+### ------------------------------------------------------------------------------
+
+### 11. Borç Listesi (Yönetici Tümünü Görür)
+# @name getDebts
+GET {{baseUrl}}/api/v1/debts HTTP/1.1
+Authorization: Bearer {{managerToken}}
+
+@firstUnitId = {{getDebts.response.body.0.unit_id}}
+
+### 12. Sakin Kendi Borçlarını Sorgular (T-3 İzolasyon: Yalnızca kendi dairesi)
+GET {{baseUrl}}/api/v1/debts HTTP/1.1
+Authorization: Bearer {{residentToken}}
+
+### 13. Banka Dekontu Bulanık Eşleme (Fuzzy Matching - T-2)
+POST {{baseUrl}}/api/v1/bank-statements/match HTTP/1.1
+Authorization: Bearer {{managerToken}}
+Content-Type: {{contentType}}
+
+{
+  "raw_description": "A BLOK NO: 5 AHMET YILMAZ AIDAT BEDELI"
+}
+
+### 14. Tahsilat İşleme (Idempotency-Key Destekli)
+POST {{baseUrl}}/api/v1/payments HTTP/1.1
+Authorization: Bearer {{managerToken}}
+Content-Type: {{contentType}}
+Idempotency-Key: PAY-TEST-UNIQUE-KEY-001
+
+{
+  "unit_id": "{{firstUnitId}}",
+  "amount_cents": 150000,
+  "payment_date": "2026-10-26",
+  "payment_channel": "BANK_TRANSFER",
+  "bank_reference": "EFT-884920",
+  "description": "Ekim Ayı Aidat Ödemesi"
+}
+
+### 15. Borç Yapılandırma Planı (T-2)
+POST {{baseUrl}}/api/v1/debts/restructure HTTP/1.1
+Authorization: Bearer {{managerToken}}
+Content-Type: {{contentType}}
+
+{
+  "unit_id": "{{firstUnitId}}",
+  "installment_count": 3,
+  "notes": "3 taksite bölündü"
+}
+
+### ------------------------------------------------------------------------------
+### F-4: GİDER YÖNETİMİ
+### ------------------------------------------------------------------------------
+
+### 16. Gider Faturalarını Listele
+GET {{baseUrl}}/api/v1/expenses HTTP/1.1
+Authorization: Bearer {{managerToken}}
+
+### 17. Yeni Gider Faturası Kaydet
+POST {{baseUrl}}/api/v1/expenses HTTP/1.1
+Authorization: Bearer {{managerToken}}
+Content-Type: {{contentType}}
+
+{
+  "category": "ELEVATOR",
+  "title": "A Blok Asansör Aylık Periyodik Bakımı",
+  "vendor_name": "Kone Asansör A.Ş.",
+  "invoice_number": "FAT-2026-099",
+  "invoice_date": "2026-10-20",
+  "amount_cents": 120000
+}
+
+### 18. Denetçinin Gider Eklemeyi Denemesi (403 Forbidden Beklenir - T-3 Güvenlik)
+POST {{baseUrl}}/api/v1/expenses HTTP/1.1
+Authorization: Bearer {{auditorToken}}
+Content-Type: {{contentType}}
+
+{
+  "category": "CLEANING",
+  "title": "İzinsiz Denetçi Gideri",
+  "vendor_name": "Test",
+  "amount_cents": 50000
+}
+
+### ------------------------------------------------------------------------------
+### F-6 & T-4: ÇİFT TARAFLI MUHASEBE VE DÖNEM KAPANIŞI
+### ------------------------------------------------------------------------------
+
+### 19. Yevmiye Defteri Kayıtlarını Listele
+GET {{baseUrl}}/api/v1/journal-entries HTTP/1.1
+Authorization: Bearer {{managerToken}}
+
+### 20. Hesap Planı ve Mizan
+GET {{baseUrl}}/api/v1/ledger-accounts HTTP/1.1
+Authorization: Bearer {{managerToken}}
+
+### ------------------------------------------------------------------------------
+### F-7 & T-4: RAPORLAR VE 'BORCU YOKTUR' BELGESİ
+### ------------------------------------------------------------------------------
+
+### 21. Finansal Özet Raporu
+GET {{baseUrl}}/api/v1/reports/summary HTTP/1.1
+Authorization: Bearer {{managerToken}}
+
+### 22. 'Borcu Yoktur' Belgesi Düzenle (T-4)
+POST {{baseUrl}}/api/v1/certificates HTTP/1.1
+Authorization: Bearer {{managerToken}}
+Content-Type: {{contentType}}
+
+{
+  "unit_id": "{{firstUnitId}}",
+  "valid_days": 30
+}
+
+### 23. Çevrimiçi Belge Doğrulama (Public / Herkese Açık)
+GET {{baseUrl}}/api/v1/certificates/verify/9F2A-B71C HTTP/1.1
