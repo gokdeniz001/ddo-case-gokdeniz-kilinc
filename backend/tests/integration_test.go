@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/siteyonet/siteyonet/internal/domain"
 	"github.com/siteyonet/siteyonet/internal/repository"
 )
 
@@ -60,7 +58,7 @@ func TestT3_RLS_TenantIsolation_CrossSiteBlocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin tx failed: %v", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Set session to Site A manager
 	_, _ = tx.Exec(ctx, `
@@ -89,7 +87,7 @@ func TestT3_RLS_AuditorReadOnly_InsertBlocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin tx failed: %v", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Set session to Auditor
 	_, _ = tx.Exec(ctx, `
@@ -124,7 +122,7 @@ func TestT3_RLS_ResidentOnlySeesOwnDebt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin tx failed: %v", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Set session to Resident User 1
 	_, _ = tx.Exec(ctx, `

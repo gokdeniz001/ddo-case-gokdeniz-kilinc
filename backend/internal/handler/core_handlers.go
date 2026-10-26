@@ -550,7 +550,7 @@ func (h *Handler) ProcessPayment(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Get site default late fee rate
-	var lateFeeRate float64 = 5.0
+	lateFeeRate := 5.0
 	_ = h.db.Pool.QueryRow(ctx, `SELECT default_late_fee_rate FROM "fy-sites" WHERE id = $1`, user.SiteID).Scan(&lateFeeRate)
 
 	// Fetch active debts for this unit

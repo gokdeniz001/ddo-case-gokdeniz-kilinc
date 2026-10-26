@@ -333,3 +333,9 @@ func (s *PaymentService) CreateRestructurePlan(
 
 	return plan, nil
 }
+
+// CalculateDelayInterest calculates simple delay interest for given principal, monthly rate, and days overdue
+func (s *PaymentService) CalculateDelayInterest(principalCents int64, monthlyLateFeeRate float64, daysOverdue int) int64 {
+	dueDate := time.Now().AddDate(0, 0, -daysOverdue)
+	return s.accrualEngine.CalculateLateFee(principalCents, monthlyLateFeeRate, dueDate, time.Now())
+}
