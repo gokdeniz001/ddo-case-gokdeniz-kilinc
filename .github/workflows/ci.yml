@@ -21,8 +21,8 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
+          --health-cmd "pg_isready -U postgres -d siteyonet"
+          --health-interval 5s
           --health-timeout 5s
           --health-retries 5
 
@@ -48,12 +48,10 @@ jobs:
           args: --timeout=5m ./...
 
       - name: Apply Migrations
+        working-directory: backend
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/siteyonet?sslmode=disable
-        run: |
-          sudo apt-get install -y postgresql-client
-          psql -h localhost -U postgres -d siteyonet -f backend/migrations/001_initial_schema.sql
-          psql -h localhost -U postgres -d siteyonet -f backend/migrations/002_rls_policies.sql
+        run: go run ./cmd/migrate/main.go
 
       - name: Run Go Unit & Integration Tests (with Race Detector)
         working-directory: backend

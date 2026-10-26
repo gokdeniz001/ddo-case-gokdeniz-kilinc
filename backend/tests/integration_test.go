@@ -30,7 +30,34 @@ func getTestDB(t *testing.T) *repository.DB {
 		return nil
 	}
 
+	applyMigrationsIfNotExist(db)
+
 	return db
+}
+
+func applyMigrationsIfNotExist(db *repository.DB) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	var exists bool
+	_ = db.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'fy-ox-users')`).Scan(&exists)
+	if exists {
+		return
+	}
+
+	dirs := []string{"migrations", "../migrations", "backend/migrations"}
+	for _, dir := range dirs {
+		files, err := os.ReadDir(dir)
+		if err == nil {
+			for _, f := range files {
+				if len(f.Name()) > 4 && f.Name()[len(f.Name())-4:] == ".sql" {
+					content, _ := os.ReadFile(dir + "/" + f.Name())
+					_, _ = db.Pool.Exec(ctx, string(content))
+				}
+			}
+			break
+		}
+	}
 }
 
 // ----------------------------------------------------------------------------
