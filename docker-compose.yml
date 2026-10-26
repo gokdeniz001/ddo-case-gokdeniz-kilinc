@@ -1,0 +1,112 @@
+
+
+networks:
+  siteyonet-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local
+
+services:
+  # 1. Database (PostgreSQL 16) - Strictly internal to compose network
+  db:
+    image: postgres:16-alpine
+    container_name: siteyonet-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-siteyonet}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - siteyonet-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-siteyonet}"]
+      interval: 4s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  # 2. Backend Go API (Port 8080)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: siteyonet-backend
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-siteyonet}?sslmode=disable"
+      ENV: "production"
+      JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-key-siteyonet-production-0c7cc1}
+    networks:
+      - siteyonet-net
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 6s
+    restart: unless-stopped
+
+  # 3. Frontend (React 18 + Vite + Nginx on Port 3000)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: siteyonet-frontend
+    ports:
+      - "3000:3000"
+    networks:
+      - siteyonet-net
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 8s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  # 4. Data Generator & Simulator (Seed Service)
+  simulator:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: siteyonet-simulator
+    entrypoint: ["/app/simulator"]
+    environment:
+      DATABASE_URL: "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-siteyonet}?sslmode=disable"
+      SIMULATOR_SEED: "42"
+      FULL_SIMULATION: "false" # Set true for 40 sites / 6,000 units scale
+    networks:
+      - siteyonet-net
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: "no"
+
+  # 5. Automated Verification Suite
+  verify:
+    build:
+      context: .
+      dockerfile: ./verify/Dockerfile
+    container_name: siteyonet-verify
+    environment:
+      API_URL: "http://backend:8080"
+    networks:
+      - siteyonet-net
+    profiles: ["verify"]
+    depends_on:
+      backend:
+        condition: service_healthy
+      simulator:
+        condition: service_completed_successfully
