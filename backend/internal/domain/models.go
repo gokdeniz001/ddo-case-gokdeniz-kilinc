@@ -70,16 +70,16 @@ func FormatCents(cents int64) string {
 
 // User represents fy-ox-users
 type User struct {
-	ID           uuid.UUID `json:"id"`
+	ID           uuid.UUID  `json:"id"`
 	SiteID       *uuid.UUID `json:"site_id,omitempty"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"-"`
-	FullName     string    `json:"full_name"`
-	Phone        string    `json:"phone,omitempty"`
-	Role         string    `json:"role"`
-	IsActive     bool      `json:"is_active"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	Email        string     `json:"email"`
+	PasswordHash string     `json:"-"`
+	FullName     string     `json:"full_name"`
+	Phone        string     `json:"phone,omitempty"`
+	Role         string     `json:"role"`
+	IsActive     bool       `json:"is_active"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 // Site represents fy-sites
@@ -154,18 +154,18 @@ type DuesDefinition struct {
 
 // Accrual represents fy-accruals
 type Accrual struct {
-	ID                 uuid.UUID  `json:"id"`
-	SiteID             uuid.UUID  `json:"site_id"`
-	DuesDefinitionID   *uuid.UUID `json:"dues_definition_id,omitempty"`
-	PeriodID           uuid.UUID  `json:"period_id"`
-	Title              string     `json:"title"`
-	TermMonth          string     `json:"term_month"`
-	DistributionType   string     `json:"distribution_type"`
-	TotalAmountCents   int64      `json:"total_amount_cents"`
-	IsReversed         bool       `json:"is_reversed"`
-	ReversalAccrualID  *uuid.UUID `json:"reversal_accrual_id,omitempty"`
-	CreatedBy          *uuid.UUID `json:"created_by,omitempty"`
-	CreatedAt          time.Time  `json:"created_at"`
+	ID                uuid.UUID  `json:"id"`
+	SiteID            uuid.UUID  `json:"site_id"`
+	DuesDefinitionID  *uuid.UUID `json:"dues_definition_id,omitempty"`
+	PeriodID          uuid.UUID  `json:"period_id"`
+	Title             string     `json:"title"`
+	TermMonth         string     `json:"term_month"`
+	DistributionType  string     `json:"distribution_type"`
+	TotalAmountCents  int64      `json:"total_amount_cents"`
+	IsReversed        bool       `json:"is_reversed"`
+	ReversalAccrualID *uuid.UUID `json:"reversal_accrual_id,omitempty"`
+	CreatedBy         *uuid.UUID `json:"created_by,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
 }
 
 // Debt represents fy-debts
@@ -232,30 +232,30 @@ type Expense struct {
 
 // LedgerAccount represents fy-ledger-accounts
 type LedgerAccount struct {
-	ID          uuid.UUID `json:"id"`
-	SiteID      uuid.UUID `json:"site_id"`
-	Code        string    `json:"code"`
-	Name        string    `json:"name"`
-	AccountType string    `json:"account_type"`
-	BalanceCents int64    `json:"balance_cents"`
-	IsActive    bool      `json:"is_active"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID           uuid.UUID `json:"id"`
+	SiteID       uuid.UUID `json:"site_id"`
+	Code         string    `json:"code"`
+	Name         string    `json:"name"`
+	AccountType  string    `json:"account_type"`
+	BalanceCents int64     `json:"balance_cents"`
+	IsActive     bool      `json:"is_active"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // JournalEntry represents fy-journal-entries
 type JournalEntry struct {
-	ID              uuid.UUID     `json:"id"`
-	SiteID          uuid.UUID     `json:"site_id"`
-	PeriodID        uuid.UUID     `json:"period_id"`
-	EntryNumber     int64         `json:"entry_number"`
-	EntryDate       time.Time     `json:"entry_date"`
-	Description     string        `json:"description"`
-	IsReversal      bool          `json:"is_reversal"`
-	ReversedEntryID *uuid.UUID    `json:"reversed_entry_id,omitempty"`
-	Lines           []JournalLine `json:"lines,omitempty"`
-	TotalDebitCents int64         `json:"total_debit_cents"`
-	TotalCreditCents int64        `json:"total_credit_cents"`
-	CreatedAt       time.Time     `json:"created_at"`
+	ID               uuid.UUID     `json:"id"`
+	SiteID           uuid.UUID     `json:"site_id"`
+	PeriodID         uuid.UUID     `json:"period_id"`
+	EntryNumber      int64         `json:"entry_number"`
+	EntryDate        time.Time     `json:"entry_date"`
+	Description      string        `json:"description"`
+	IsReversal       bool          `json:"is_reversal"`
+	ReversedEntryID  *uuid.UUID    `json:"reversed_entry_id,omitempty"`
+	Lines            []JournalLine `json:"lines,omitempty"`
+	TotalDebitCents  int64         `json:"total_debit_cents"`
+	TotalCreditCents int64         `json:"total_credit_cents"`
+	CreatedAt        time.Time     `json:"created_at"`
 }
 
 // JournalLine represents fy-journal-lines
@@ -288,21 +288,21 @@ type BankStatement struct {
 
 // ClearanceCertificate represents fy-clearance-certificates
 type ClearanceCertificate struct {
-	ID                       uuid.UUID  `json:"id"`
-	SiteID                   uuid.UUID  `json:"site_id"`
-	UnitID                   uuid.UUID  `json:"unit_id"`
-	UnitNumber               string     `json:"unit_number"`
-	BlockName                string     `json:"block_name"`
-	UserID                   uuid.UUID  `json:"user_id"`
-	UserName                 string     `json:"user_name"`
-	CertificateNumber        string     `json:"certificate_number"`
-	VerificationCode         string     `json:"verification_code"`
-	Sha256Hash               string     `json:"sha256_hash"`
-	IssuedDate               time.Time  `json:"issued_date"`
-	ValidUntil               time.Time  `json:"valid_until"`
-	DebtBalanceAtIssueCents  int64      `json:"debt_balance_at_issue_cents"`
-	IssuedBy                 *uuid.UUID `json:"issued_by,omitempty"`
-	CreatedAt                time.Time  `json:"created_at"`
+	ID                      uuid.UUID  `json:"id"`
+	SiteID                  uuid.UUID  `json:"site_id"`
+	UnitID                  uuid.UUID  `json:"unit_id"`
+	UnitNumber              string     `json:"unit_number"`
+	BlockName               string     `json:"block_name"`
+	UserID                  uuid.UUID  `json:"user_id"`
+	UserName                string     `json:"user_name"`
+	CertificateNumber       string     `json:"certificate_number"`
+	VerificationCode        string     `json:"verification_code"`
+	Sha256Hash              string     `json:"sha256_hash"`
+	IssuedDate              time.Time  `json:"issued_date"`
+	ValidUntil              time.Time  `json:"valid_until"`
+	DebtBalanceAtIssueCents int64      `json:"debt_balance_at_issue_cents"`
+	IssuedBy                *uuid.UUID `json:"issued_by,omitempty"`
+	CreatedAt               time.Time  `json:"created_at"`
 }
 
 // Announcement represents fy-announcements
@@ -351,17 +351,17 @@ type MaintenanceRequest struct {
 
 // AuditLog represents fy-audit-logs
 type AuditLog struct {
-	ID          uuid.UUID       `json:"id"`
-	SiteID      *uuid.UUID      `json:"site_id,omitempty"`
-	UserID      *uuid.UUID      `json:"user_id,omitempty"`
-	Action      string          `json:"action"`
-	EntityTable string          `json:"entity_table"`
-	EntityID    uuid.UUID       `json:"entity_id"`
-	OldValues   interface{}     `json:"old_values,omitempty"`
-	NewValues   interface{}     `json:"new_values,omitempty"`
-	IPAddress   string          `json:"ip_address,omitempty"`
-	UserAgent   string          `json:"user_agent,omitempty"`
-	CreatedAt   time.Time       `json:"created_at"`
+	ID          uuid.UUID   `json:"id"`
+	SiteID      *uuid.UUID  `json:"site_id,omitempty"`
+	UserID      *uuid.UUID  `json:"user_id,omitempty"`
+	Action      string      `json:"action"`
+	EntityTable string      `json:"entity_table"`
+	EntityID    uuid.UUID   `json:"entity_id"`
+	OldValues   interface{} `json:"old_values,omitempty"`
+	NewValues   interface{} `json:"new_values,omitempty"`
+	IPAddress   string      `json:"ip_address,omitempty"`
+	UserAgent   string      `json:"user_agent,omitempty"`
+	CreatedAt   time.Time   `json:"created_at"`
 }
 
 // API Error standard

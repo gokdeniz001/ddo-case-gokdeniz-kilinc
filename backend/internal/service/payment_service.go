@@ -5,7 +5,6 @@ import (
 	"math"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -140,10 +139,10 @@ func (s *PaymentService) AllocatePayment(
 // FuzzyMatchBankStatement extracts unit number and block from raw bank transfer description
 // Uses regex pattern matching + Levenshtein distance for fuzzy matching
 type MatchCandidate struct {
-	UnitID     uuid.UUID
-	BlockName  string
-	UnitNumber string
-	Score      float64
+	UnitID     uuid.UUID `json:"unit_id"`
+	BlockName  string    `json:"block_name"`
+	UnitNumber string    `json:"unit_number"`
+	Score      float64   `json:"score"`
 }
 
 func (s *PaymentService) FuzzyMatchUnit(rawDescription string, allUnits []domain.Unit) (*MatchCandidate, error) {
@@ -186,14 +185,22 @@ func (s *PaymentService) FuzzyMatchUnit(rawDescription string, allUnits []domain
 
 	var bestCandidate *MatchCandidate
 	highestScore := 0.0
+	secondScore := 0.0
 
 	for _, unit := range allUnits {
 		score := 0.0
 		unitNum := strings.TrimSpace(unit.UnitNumber)
 		blockName := strings.ToUpper(strings.TrimSpace(unit.BlockName))
 
+		if extractedNumber != "" && extractedNumber != unitNum {
+			continue
+		}
+		blockParts := strings.Fields(blockName)
+		if extractedBlock != "" && (len(blockParts) == 0 || blockParts[0] != extractedBlock) {
+			continue
+		}
 		// Exact unit number match
-		if extractedNumber != "" && (extractedNumber == unitNum || strconv.Itoa(unit.FloorNumber) == extractedNumber) {
+		if extractedNumber != "" && extractedNumber == unitNum {
 			score += 0.60
 		} else if strings.Contains(cleaned, " "+unitNum+" ") || strings.Contains(cleaned, "D"+unitNum) || strings.Contains(cleaned, "NO"+unitNum) {
 			score += 0.50
@@ -204,7 +211,7 @@ func (s *PaymentService) FuzzyMatchUnit(rawDescription string, allUnits []domain
 		}
 
 		// Block match
-		if extractedBlock != "" && strings.Contains(blockName, extractedBlock) {
+		if extractedBlock != "" && len(blockParts) > 0 && blockParts[0] == extractedBlock {
 			score += 0.40
 		} else if strings.Contains(cleaned, blockName) {
 			score += 0.35
@@ -224,6 +231,7 @@ func (s *PaymentService) FuzzyMatchUnit(rawDescription string, allUnits []domain
 		}
 
 		if score > highestScore {
+			secondScore = highestScore
 			highestScore = score
 			bestCandidate = &MatchCandidate{
 				UnitID:     unit.ID,
@@ -231,10 +239,12 @@ func (s *PaymentService) FuzzyMatchUnit(rawDescription string, allUnits []domain
 				UnitNumber: unit.UnitNumber,
 				Score:      math.Min(score, 1.0),
 			}
+		} else if score > secondScore {
+			secondScore = score
 		}
 	}
 
-	if bestCandidate == nil || highestScore < 0.30 {
+	if bestCandidate == nil || highestScore < 0.50 || highestScore-secondScore < 0.10 {
 		return nil, errors.New("no confident unit match found")
 	}
 

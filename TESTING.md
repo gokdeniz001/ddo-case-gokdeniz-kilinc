@@ -105,3 +105,26 @@ cd backend && go test -v -run "TestConcurrency" ./tests/...
    - Tüm finansal raporları ve yevmiye kayıtlarını görebildiğinizi, ancak yeni gider veya tahakkuk ekleme yetkinizin olmadığını teyit edin.
 6. Sol menüden **"'Borcu Yoktur' Belgesi (T-4)"** sekmesine gidin.
    - Borcu 0 olan bir daire seçip **"Belgeyi İmzala ve Üret"** butonuna basın. Üretilen doğrulama kodunu yandaki kutuya yapıştırıp **"Doğrula"** butonuna basın. SHA-256 kriptografik yeşil onay rozetini görün.
+
+
+## 26 Ekim 2026 teslim öncesi doğrulama güncellemesi
+
+- `docker compose --profile verify run --build --rm verify`: Go birim/gerçek PostgreSQL entegrasyon testlerini, ardından çalışan HTTP API üzerinde F-1…F-7 / T-1…T-4 kabul senaryolarını çalıştırır. Herhangi bir hata işlemi sıfırdan farklı kodla bitirir. Doğrulama `verify-...` adlı demo kayıtları ekler; temiz başlangıç için `make reset-demo` kullanılır.
+- Entegrasyon testleri boş veya eksik veride SKIP etmez. Her test kendi site, kullanıcı, daire ve borç verisini oluşturur, sonunda temizler.
+- T-1: `go test -v ./tests/... -run 'TestT1|TestIntegration_Accrual|TestIntegration_Ownership'`; tam kuruş dağıtımı, dört dağıtım türü, muafiyet, 31 günlük ayda 10/21 günlük malik değişimi.
+- T-2: `go test -v -race ./tests/... -run 'TestT2|TestIntegration_.*Payment|TestIntegration_.*Idempotency|TestIntegration_Restructure'`; kısmi ödeme, fazla ödeme, faiz/anapara sırası, gerçek paralel tahsilat, aynı anahtarın eşzamanlı tekrarı, yapılandırma.
+- T-3: `go test -v ./tests/... -run 'TestIntegration_.*Privacy|TestIntegration_RLS|TestIntegration_Auditor|TestIntegration_CrossSite|TestIntegration_MultiSite'`; dolu iki ayrı site, doğrudan kısıtlı SQL rolü, sakin mahremiyeti, denetçi yazma engeli, yetkisiz site geçişi.
+- T-4: `go test -v ./tests/... -run 'TestT4|TestIntegration_Closed|TestIntegration_Certificate'`; çift taraflı kayıt, kapalı döneme yazma engeli, borçlu dairenin belge talebinin reddi ve gerçek belge imza kontrolü. F-6 API senaryosu ayrıca fiş/ters fiş oluşturur ve satır toplamlarını okur.
+- Go komutları `backend/` içinde, PostgreSQL'e erişen `DATABASE_URL` ile çalıştırılır. Go yüklü değilse tek compose doğrulama komutu yeterlidir.
+- Yük: `make load` veya `docker run --rm --network siteyonet_siteyonet-net -e API_URL=http://backend:8080 --mount type=bind,source=<repo>/k6,target=/scripts,readonly grafana/k6:0.49.0 run /scripts/load-test.js`. Docker ağ adı compose proje adına bağlıdır.
+- `audit/load-before-pagination.json`, `audit/load-after-pagination.json` ve `audit/explain.txt` gerçek ölçümlerdir. Yerel ölçümler bulut veya soğuk önbellek garantisi değildir.
+
+### İlave elle deneme
+
+1. Yönetici → Duyuru, Karar & Bakım: duyuru/karar oluştur, bakım kaydını ilerlet. Denetçi rolünde aynı ekranda yeni kayıt formu görünmemeli.
+2. Temiz tam seed sonrası yönetici üst çubuktaki site seçicisiyle ikinci siteye geçer; yalnızca seçilen sitenin daireleri görünür. Üye olmayan siteye `POST /auth/site` 403 döner.
+3. Malik ve kiracı rollerinde yönetim menüleri gizlenir; yalnızca bağlı olunan dairelerin borçları görünür. Önceki demo verisi yeniden seed edilmediyse örnek hesabın daire bağlantıları eski kalabilir.
+4. `requests.http`: yeni örneklerde önce ilgili named request'i çalıştırın. `createdBlock`, `createdUnit`, `createdMaintenance`, `createdJournal` yanıtları bir sonraki isteğin kimliğini sağlar. Dönem kapanışı yalnızca koleksiyonun oluşturduğu 2999 deneme dönemini hedefler; tekrar oluşturmak için tarihleri değiştirin.
+5. Borç sayfalama: `GET /debts?limit=1`, sonra son kaydın `due_date` tarih kısmı ve `id` değeri ile `GET /debts?limit=1&after=YYYY-MM-DD,UUID`. Kayıt tekrarı olmamalı.
+
+Bilinen kapsam sınırları ve teslim değerlendirmesi için [DELIVERY_AUDIT.md](DELIVERY_AUDIT.md).

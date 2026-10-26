@@ -65,17 +65,19 @@ func (h *Handler) InitRoutes() http.Handler {
 	r.Get("/api/v1/certificates/verify/{code}", h.VerifyCertificate)
 
 	// Auth Public Routes
-	r.Route("/api/v1/auth", func(r chi.Router) {
-		r.Post("/login", h.Login)
-	})
+	r.Post("/api/v1/auth/login", h.Login)
+	r.Post("/api/v1/auth/refresh", h.Refresh)
 
 	// Protected API Routes
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware)
+		r.Use(appMiddleware.RequireRoles("manager", "accountant", "auditor", "owner", "tenant"))
+		r.Use(h.TenantTransaction)
 		r.Use(appMiddleware.IdempotencyMiddleware(h.db.Pool))
 
 		// Current User
 		r.Get("/auth/me", h.GetMe)
+		r.Post("/auth/site", h.SwitchSite)
 
 		// F-1: Sites, Blocks, Units
 		r.Get("/sites", h.ListSites)
@@ -84,6 +86,7 @@ func (h *Handler) InitRoutes() http.Handler {
 		r.Post("/blocks", h.CreateBlock)
 		r.Get("/units", h.ListUnits)
 		r.Post("/units", h.CreateUnit)
+		r.Post("/units/{id}/transfer", h.TransferOwnership)
 
 		// F-2: Dues Definitions & Accruals (T-1 Accrual Engine)
 		r.Get("/dues-definitions", h.ListDuesDefinitions)
@@ -96,6 +99,7 @@ func (h *Handler) InitRoutes() http.Handler {
 		r.Get("/debts", h.ListDebts)
 		r.Post("/payments", h.ProcessPayment) // T-2: Waterfall allocation
 		r.Post("/debts/restructure", h.RestructureDebts)
+		r.Post("/bank-statements/import", h.ImportBankCSV)
 		r.Post("/bank-statements/match", h.FuzzyMatchBankStatement) // T-2: Fuzzy match
 		r.Get("/bank-statements", h.ListBankStatements)
 
@@ -124,6 +128,8 @@ func (h *Handler) InitRoutes() http.Handler {
 		// F-7: Reports & Clearance Certificates (T-4)
 		r.Get("/reports/summary", h.GetFinancialSummary)
 		r.Get("/reports/budget-comparison", h.GetBudgetComparison)
+		r.Post("/budgets", h.SaveBudget)
+		r.Get("/reports/reconciliation", h.Reconciliation)
 		r.Get("/certificates", h.ListCertificates)
 		r.Post("/certificates", h.IssueClearanceCertificate)
 

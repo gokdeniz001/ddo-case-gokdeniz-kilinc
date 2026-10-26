@@ -4,8 +4,8 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
 RUN npm run build
@@ -48,6 +48,10 @@ EOF
 
 # Copy static assets from builder
 COPY --from=builder /app/dist /usr/share/nginx/html
+
+RUN sed -i 's|pid        /var/run/nginx.pid;|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf \
+    && chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx/conf.d
+USER nginx
 
 EXPOSE 3000
 

@@ -2,130 +2,78 @@ package middleware
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"io"
 	"net/http"
-	"sync"
-	"time"
+	"net/http/httptest"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type responseRecorder struct {
-	http.ResponseWriter
-	statusCode int
-	body       *bytes.Buffer
-}
+const TransactionKey contextKey = "tenantTransaction"
 
-func (r *responseRecorder) WriteHeader(code int) {
-	r.statusCode = code
-	r.ResponseWriter.WriteHeader(code)
-}
-
-func (r *responseRecorder) Write(b []byte) (int, error) {
-	r.body.Write(b)
-	return r.ResponseWriter.Write(b)
-}
-
-type MemoryIdempotencyStore struct {
-	mu    sync.RWMutex
-	cache map[string]CachedResponse
-}
-
-type CachedResponse struct {
-	StatusCode int
-	Body       []byte
-	CreatedAt  time.Time
-}
-
-var IdempotencyStore = &MemoryIdempotencyStore{
-	cache: make(map[string]CachedResponse),
-}
-
-// IdempotencyMiddleware ensures idempotent state-changing POST requests
-func IdempotencyMiddleware(dbPool *pgxpool.Pool) func(http.Handler) http.Handler {
+// The request transaction owns both the business changes and cached response.
+// A database advisory lock serializes identical keys, including across API replicas.
+func IdempotencyMiddleware(_ *pgxpool.Pool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method != http.MethodPost {
+			key := r.Header.Get("Idempotency-Key")
+			if r.Method != http.MethodPost || key == "" {
 				next.ServeHTTP(w, r)
 				return
 			}
-
-			idempotencyKey := r.Header.Get("Idempotency-Key")
-			if idempotencyKey == "" {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			// Read body to compute hash
-			bodyBytes, err := io.ReadAll(r.Body)
-			if err != nil {
-				RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "Could not read request body")
-				return
-			}
-			r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
-			hasher := sha256.New()
-			hasher.Write(bodyBytes)
-			reqHash := hex.EncodeToString(hasher.Sum(nil))
-
 			user := GetCurrentUser(r.Context())
-			siteID := ""
-			if user != nil {
-				siteID = user.SiteID.String()
-			}
-			compositeKey := siteID + ":" + idempotencyKey
-
-			// Check DB or memory cache
-			IdempotencyStore.mu.RLock()
-			cached, exists := IdempotencyStore.cache[compositeKey]
-			IdempotencyStore.mu.RUnlock()
-
-			if exists {
-				w.Header().Set("Content-Type", "application/json")
-				w.Header().Set("X-Cache-Lookup", "HIT-IDEMPOTENT")
-				w.WriteHeader(cached.StatusCode)
-				_, _ = w.Write(cached.Body)
+			tx, ok := r.Context().Value(TransactionKey).(pgx.Tx)
+			if user == nil || !ok {
+				RespondError(w, 500, "TX_REQUIRED", "Transaction required")
 				return
 			}
-
-			// Record response
-			rec := &responseRecorder{
-				ResponseWriter: w,
-				statusCode:     http.StatusOK,
-				body:           bytes.NewBuffer(nil),
+			body, err := io.ReadAll(io.LimitReader(r.Body, 1048577))
+			if err != nil || len(body) > 1048576 {
+				RespondError(w, 400, "BAD_REQUEST", "Request body too large or unreadable")
+				return
 			}
-
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			sum := sha256.Sum256(append([]byte(r.Method+" "+r.URL.RequestURI()+" "+user.UserID.String()+"\n"), body...))
+			hash := hex.EncodeToString(sum[:])
+			if _, err := tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, user.SiteID.String()+":"+key); err != nil {
+				RespondError(w, 500, "DB_ERROR", "Idempotency lock failed")
+				return
+			}
+			var storedHash string
+			var code int
+			var cached []byte
+			err = tx.QueryRow(r.Context(), `SELECT request_hash,response_code,response_body FROM "fy-idempotency-keys" WHERE site_id=$1 AND key=$2`, user.SiteID, key).Scan(&storedHash, &code, &cached)
+			if err == nil {
+				if storedHash != hash {
+					RespondError(w, 409, "IDEMPOTENCY_CONFLICT", "Key already used for another request")
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(code)
+				_, _ = w.Write(cached)
+				return
+			}
+			if err != pgx.ErrNoRows {
+				RespondError(w, 500, "DB_ERROR", "Idempotency lookup failed")
+				return
+			}
+			rec := httptest.NewRecorder()
 			next.ServeHTTP(rec, r)
-
-			// If success response, store in memory and db
-			if rec.statusCode >= 200 && rec.statusCode < 300 {
-				IdempotencyStore.mu.Lock()
-				IdempotencyStore.cache[compositeKey] = CachedResponse{
-					StatusCode: rec.statusCode,
-					Body:       rec.body.Bytes(),
-					CreatedAt:  time.Now(),
-				}
-				IdempotencyStore.mu.Unlock()
-
-				// Optionally persist in DB if pool is available
-				if dbPool != nil && user != nil {
-					go func(key, sID, uID, rHash string, code int, respBody []byte) {
-						ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-						defer cancel()
-						var jsonVal interface{}
-						_ = json.Unmarshal(respBody, &jsonVal)
-						_, _ = dbPool.Exec(ctx, `
-							INSERT INTO "fy-idempotency-keys" (key, site_id, user_id, request_hash, response_code, response_body)
-							VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6)
-							ON CONFLICT (key, site_id) DO NOTHING
-						`, key, sID, uID, rHash, code, respBody)
-					}(idempotencyKey, siteID, user.UserID.String(), reqHash, rec.statusCode, rec.body.Bytes())
+			if rec.Code >= 200 && rec.Code < 300 {
+				_, err = tx.Exec(r.Context(), `INSERT INTO "fy-idempotency-keys" (key,site_id,user_id,request_hash,response_code,response_body) VALUES ($1,$2,$3,$4,$5,$6::jsonb)`, key, user.SiteID, user.UserID, hash, rec.Code, rec.Body.String())
+				if err != nil {
+					RespondError(w, 500, "DB_ERROR", "Idempotency persistence failed")
+					return
 				}
 			}
+			for k, v := range rec.Header() {
+				w.Header()[k] = v
+			}
+			w.WriteHeader(rec.Code)
+			_, _ = w.Write(rec.Body.Bytes())
 		})
 	}
 }

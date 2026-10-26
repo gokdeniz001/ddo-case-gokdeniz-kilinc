@@ -4,21 +4,24 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/siteyonet/siteyonet/internal/config"
 	"github.com/siteyonet/siteyonet/internal/handler"
+	"github.com/siteyonet/siteyonet/internal/middleware"
 	"github.com/siteyonet/siteyonet/internal/repository"
 	"github.com/siteyonet/siteyonet/internal/service"
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	cfg := config.Load()
+	middleware.JWTSecret = []byte(cfg.JWTSecret)
 	log.Printf("Starting SiteYonet API Server on port %s (env: %s)...", cfg.Port, cfg.Environment)
 
 	// Initialize DB Connection
@@ -29,8 +32,8 @@ func main() {
 	defer db.Pool.Close()
 
 	// Run Database Migrations Automatically
-	if err := runMigrations(db, "migrations"); err != nil {
-		log.Printf("Warning: Automatic migration check: %v", err)
+	if err := db.Migrate("migrations"); err != nil {
+		log.Fatalf("Migration failed: %v", err)
 	}
 
 	// Initialize Domain Services
@@ -73,41 +76,4 @@ func main() {
 	}
 
 	log.Println("Server exited cleanly.")
-}
-
-// runMigrations executes SQL files in order from the migrations directory
-func runMigrations(db *repository.DB, dir string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Check if directory exists
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		// Try fallback relative path
-		dir = filepath.Join("backend", dir)
-		if _, err := os.Stat(dir); os.IsNotExist(err) {
-			return fmt.Errorf("migrations directory not found")
-		}
-	}
-
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-
-	for _, file := range files {
-		if filepath.Ext(file.Name()) == ".sql" {
-			filePath := filepath.Join(dir, file.Name())
-			sqlBytes, err := os.ReadFile(filePath)
-			if err != nil {
-				return fmt.Errorf("failed to read migration %s: %w", file.Name(), err)
-			}
-
-			log.Printf("Applying database migration: %s", file.Name())
-			if _, err := db.Pool.Exec(ctx, string(sqlBytes)); err != nil {
-				log.Printf("Notice on %s: %v (might already exist)", file.Name(), err)
-			}
-		}
-	}
-
-	return nil
 }

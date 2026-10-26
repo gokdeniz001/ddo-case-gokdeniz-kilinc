@@ -1,0 +1,103 @@
+=== RUN   TestT1_LargestRemainderMethod_CentExactEqual
+--- PASS: TestT1_LargestRemainderMethod_CentExactEqual (0.00s)
+=== RUN   TestT1_LargestRemainderMethod_CentExactLandShare
+--- PASS: TestT1_LargestRemainderMethod_CentExactLandShare (0.00s)
+=== RUN   TestT1_ExemptUnitsExcluded
+--- PASS: TestT1_ExemptUnitsExcluded (0.00s)
+=== RUN   TestT1_MidPeriodOwnershipTransfer_Prorata
+--- PASS: TestT1_MidPeriodOwnershipTransfer_Prorata (0.00s)
+=== RUN   TestT2_WaterfallAllocation_InterestThenPrincipalThenFIFO
+--- PASS: TestT2_WaterfallAllocation_InterestThenPrincipalThenFIFO (0.00s)
+=== RUN   TestT2_Overpayment_StoredAsUnallocatedCredit
+--- PASS: TestT2_Overpayment_StoredAsUnallocatedCredit (0.00s)
+=== RUN   TestT2_FuzzyMatchBankStatement
+--- PASS: TestT2_FuzzyMatchBankStatement (0.00s)
+=== RUN   TestT2_DebtRestructurePlan
+--- PASS: TestT2_DebtRestructurePlan (0.00s)
+=== RUN   TestT4_DoubleEntryValidation
+--- PASS: TestT4_DoubleEntryValidation (0.00s)
+=== RUN   TestT4_ReversalJournalEntry
+--- PASS: TestT4_ReversalJournalEntry (0.00s)
+=== RUN   TestT4_ClearanceCertificate_EnforceZeroDebtAndCryptographicProof
+--- PASS: TestT4_ClearanceCertificate_EnforceZeroDebtAndCryptographicProof (0.00s)
+=== RUN   TestConcurrency_BalanceRaceConditionProtection
+--- PASS: TestConcurrency_BalanceRaceConditionProtection (0.01s)
+=== RUN   TestT1_DistributionType_AreaM2
+--- PASS: TestT1_DistributionType_AreaM2 (0.00s)
+=== RUN   TestT1_DistributionType_ResidentCount
+--- PASS: TestT1_DistributionType_ResidentCount (0.00s)
+=== RUN   TestT2_LateFeeCalculation_DailySimpleInterest
+--- PASS: TestT2_LateFeeCalculation_DailySimpleInterest (0.00s)
+=== RUN   TestT2_FuzzyRejectsAmbiguityAndFloorNumber
+--- PASS: TestT2_FuzzyRejectsAmbiguityAndFloorNumber (0.00s)
+=== RUN   TestIntegration_AnonymousEndpointsDenied
+2026/10/26 19:20:06 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_AnonymousEndpointsDenied (0.17s)
+=== RUN   TestIntegration_ResidentUnitPrivacy
+2026/10/26 19:20:06 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_ResidentUnitPrivacy (0.18s)
+=== RUN   TestIntegration_ResidentDebtPrivacy
+2026/10/26 19:20:06 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_ResidentDebtPrivacy (0.18s)
+=== RUN   TestIntegration_RLSCrossSiteBlocked
+2026/10/26 19:20:07 PostgreSQL connection pool initialized successfully
+2026/10/26 19:20:07 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_RLSCrossSiteBlocked (0.33s)
+=== RUN   TestIntegration_AuditorCannotWrite
+2026/10/26 19:20:07 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_AuditorCannotWrite (0.18s)
+=== RUN   TestIntegration_PaymentAndAudit
+2026/10/26 19:20:07 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_PaymentAndAudit (0.19s)
+=== RUN   TestIntegration_IdempotencyReplayAndConflict
+2026/10/26 19:20:07 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_IdempotencyReplayAndConflict (0.24s)
+=== RUN   TestIntegration_ConcurrentPayments
+2026/10/26 19:20:08 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_ConcurrentPayments (0.80s)
+=== RUN   TestIntegration_MaintenanceTransition
+2026/10/26 19:20:08 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_MaintenanceTransition (0.20s)
+=== RUN   TestIntegration_ClosedPeriodRejectsJournal
+2026/10/26 19:20:09 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_ClosedPeriodRejectsJournal (0.20s)
+=== RUN   TestIntegration_CertificateDebtAndVerification
+2026/10/26 19:20:09 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_CertificateDebtAndVerification (0.29s)
+=== RUN   TestIntegration_AccrualCentExactAPI
+2026/10/26 19:20:09 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_AccrualCentExactAPI (0.20s)
+=== RUN   TestIntegration_RestructureAPI
+2026/10/26 19:20:09 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_RestructureAPI (0.20s)
+=== RUN   TestIntegration_IdempotencyConcurrentSameKey
+2026/10/26 19:20:09 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_IdempotencyConcurrentSameKey (0.35s)
+=== RUN   TestIntegration_CrossSiteUnitReferenceRejected
+2026/10/26 19:20:10 PostgreSQL connection pool initialized successfully
+2026/10/26 19:20:10 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_CrossSiteUnitReferenceRejected (0.34s)
+=== RUN   TestIntegration_RefreshTokenRotation
+2026/10/26 19:20:10 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_RefreshTokenRotation (0.20s)
+=== RUN   TestIntegration_MultiSiteSwitch
+2026/10/26 19:20:10 PostgreSQL connection pool initialized successfully
+2026/10/26 19:20:10 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_MultiSiteSwitch (0.36s)
+=== RUN   TestIntegration_OwnershipDaySplitAPI
+2026/10/26 19:20:11 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_OwnershipDaySplitAPI (0.25s)
+=== RUN   TestIntegration_DebtKeysetPagination
+2026/10/26 19:20:11 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_DebtKeysetPagination (0.19s)
+=== RUN   TestIntegration_BankCSVImport
+2026/10/26 19:20:11 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_BankCSVImport (0.21s)
+=== RUN   TestIntegration_BudgetAndReconciliation
+2026/10/26 19:20:11 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_BudgetAndReconciliation (0.25s)
+=== RUN   TestIntegration_AccrualReversalLedger
+2026/10/26 19:20:12 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_AccrualReversalLedger (0.27s)
+PASS
+ok  	github.com/siteyonet/siteyonet/tests	6.849s

@@ -1,0 +1,107 @@
+Pager usage is off.
+BEGIN
+SET
+              set_config              | set_config
+--------------------------------------+------------
+ 5a7a23b0-d852-4043-a074-733a14ed1df9 | manager
+(1 row)
+
+KEYSET BASELINE - forced sequential scan, same data and query
+SET
+SET
+SET
+                                                                                                                                                                                                                                                                                      QUERY PLAN
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=574828.05..574829.30 rows=500 width=28) (actual time=456.290..456.368 rows=500 loops=1)
+   Buffers: shared hit=6790 read=899
+   ->  Sort  (cost=574828.05..574836.88 rows=3534 width=28) (actual time=81.280..81.312 rows=500 loops=1)
+         Sort Key: "fy-debts".due_date, "fy-debts".id
+         Sort Method: top-N heapsort  Memory: 84kB
+         Buffers: shared hit=6790 read=899
+         ->  Seq Scan on "fy-debts"  (cost=22839.00..574651.95 rows=3534 width=28) (actual time=0.339..78.627 rows=5664 loops=1)
+               Filter: ((site_id = '5a7a23b0-d852-4043-a074-733a14ed1df9'::uuid) AND (app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = ANY ('{owner,tenant}'::text[])) AND ((user_id = app_get_user_id()) OR (hashed SubPlan 1))) OR app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = ANY ('{manager,accountant}'::text[]))) OR app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = 'auditor'::text))))
+               Rows Removed by Filter: 209196
+               Buffers: shared hit=6784 read=899
+               SubPlan 1
+                 ->  Seq Scan on "fy-units"  (cost=0.00..22839.00 rows=1 width=16) (never executed)
+                       Filter: ((app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = ANY ('{manager,accountant}'::text[]))) OR app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND ((owner_id = app_get_user_id()) OR (tenant_id = app_get_user_id()))) OR app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = 'auditor'::text)) OR ((site_id = app_get_site_id()) AND (app_get_role() = ANY ('{owner,tenant}'::text[])) AND app_has_unit_history(id))) AND ((owner_id = app_get_user_id()) OR (tenant_id = app_get_user_id())))
+ Planning:
+   Buffers: shared hit=242
+ Planning Time: 9.483 ms
+ JIT:
+   Functions: 16
+   Options: Inlining true, Optimization true, Expressions true, Deforming true
+   Timing: Generation 3.304 ms, Inlining 115.091 ms, Optimization 137.892 ms, Emission 122.034 ms, Total 378.320 ms
+ Execution Time: 501.273 ms
+(21 rows)
+
+UNIT DEBT BASELINE - forced sequential scan
+                                                                                                                                                                                                                                                                                QUERY PLAN
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Seq Scan on "fy-debts"  (cost=22839.00..575189.10 rows=24 width=24) (actual time=263.942..294.868 rows=36 loops=1)
+   Filter: ((unit_id = '8b77f59f-3d70-4880-87a9-1af0927cfffe'::uuid) AND ((status)::text = 'UNPAID'::text) AND (app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = ANY ('{owner,tenant}'::text[])) AND ((user_id = app_get_user_id()) OR (hashed SubPlan 1))) OR app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = ANY ('{manager,accountant}'::text[]))) OR app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = 'auditor'::text))))
+   Rows Removed by Filter: 214824
+   Buffers: shared hit=6813 read=867
+   SubPlan 1
+     ->  Seq Scan on "fy-units"  (cost=0.00..22839.00 rows=1 width=16) (never executed)
+           Filter: ((app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = ANY ('{manager,accountant}'::text[]))) OR app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND ((owner_id = app_get_user_id()) OR (tenant_id = app_get_user_id()))) OR app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = 'auditor'::text)) OR ((site_id = app_get_site_id()) AND (app_get_role() = ANY ('{owner,tenant}'::text[])) AND app_has_unit_history(id))) AND ((owner_id = app_get_user_id()) OR (tenant_id = app_get_user_id())))
+ Planning:
+   Buffers: shared hit=6
+ Planning Time: 0.671 ms
+ JIT:
+   Functions: 15
+   Options: Inlining true, Optimization true, Expressions true, Deforming true
+   Timing: Generation 3.258 ms, Inlining 31.831 ms, Optimization 120.765 ms, Emission 111.227 ms, Total 267.080 ms
+ Execution Time: 298.373 ms
+(15 rows)
+
+KEYSET INDEX - normal planner
+SET
+SET
+SET
+                                                                                                                                                                                                                                              QUERY PLAN
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=17.29..3939.40 rows=500 width=28) (actual time=0.075..4.374 rows=500 loops=1)
+   Buffers: shared hit=506
+   ->  Index Scan using debts_site_due_id on "fy-debts"  (cost=17.29..27738.75 rows=3534 width=28) (actual time=0.074..4.321 rows=500 loops=1)
+         Index Cond: (site_id = '5a7a23b0-d852-4043-a074-733a14ed1df9'::uuid)
+         Filter: (app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = ANY ('{owner,tenant}'::text[])) AND ((user_id = app_get_user_id()) OR (hashed SubPlan 1))) OR app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = ANY ('{manager,accountant}'::text[]))) OR app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = 'auditor'::text)))
+         Buffers: shared hit=506
+         SubPlan 1
+           ->  Bitmap Heap Scan on "fy-units"  (cost=9.08..16.87 rows=1 width=16) (never executed)
+                 Recheck Cond: ((owner_id = app_get_user_id()) OR (tenant_id = app_get_user_id()))
+                 Filter: (app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = ANY ('{manager,accountant}'::text[]))) OR app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND ((owner_id = app_get_user_id()) OR (tenant_id = app_get_user_id()))) OR app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = 'auditor'::text)) OR ((site_id = app_get_site_id()) AND (app_get_role() = ANY ('{owner,tenant}'::text[])) AND app_has_unit_history(id)))
+                 ->  BitmapOr  (cost=9.08..9.08 rows=1 width=0) (never executed)
+                       ->  Bitmap Index Scan on idx_units_owner  (cost=0.00..4.54 rows=1 width=0) (never executed)
+                             Index Cond: (owner_id = app_get_user_id())
+                       ->  Bitmap Index Scan on idx_units_tenant  (cost=0.00..4.54 rows=1 width=0) (never executed)
+                             Index Cond: (tenant_id = app_get_user_id())
+ Planning Time: 0.640 ms
+ Execution Time: 4.597 ms
+(17 rows)
+
+UNIT DEBT INDEX - normal planner
+                                                                                                                                                                                                                                           QUERY PLAN
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on "fy-debts"  (cost=21.65..243.28 rows=24 width=24) (actual time=0.093..0.641 rows=36 loops=1)
+   Recheck Cond: ((unit_id = '8b77f59f-3d70-4880-87a9-1af0927cfffe'::uuid) AND ((status)::text = 'UNPAID'::text))
+   Filter: (app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = ANY ('{owner,tenant}'::text[])) AND ((user_id = app_get_user_id()) OR (hashed SubPlan 1))) OR app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = ANY ('{manager,accountant}'::text[]))) OR app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = 'auditor'::text)))
+   Heap Blocks: exact=4
+   Buffers: shared hit=7
+   ->  Bitmap Index Scan on idx_debts_unit_status  (cost=0.00..4.77 rows=35 width=0) (actual time=0.046..0.046 rows=36 loops=1)
+         Index Cond: ((unit_id = '8b77f59f-3d70-4880-87a9-1af0927cfffe'::uuid) AND ((status)::text = 'UNPAID'::text))
+         Buffers: shared hit=3
+   SubPlan 1
+     ->  Bitmap Heap Scan on "fy-units"  (cost=9.08..16.87 rows=1 width=16) (never executed)
+           Recheck Cond: ((owner_id = app_get_user_id()) OR (tenant_id = app_get_user_id()))
+           Filter: (app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = ANY ('{manager,accountant}'::text[]))) OR app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND ((owner_id = app_get_user_id()) OR (tenant_id = app_get_user_id()))) OR app_is_bypass_rls() OR ((site_id = app_get_site_id()) AND (app_get_role() = 'auditor'::text)) OR ((site_id = app_get_site_id()) AND (app_get_role() = ANY ('{owner,tenant}'::text[])) AND app_has_unit_history(id)))
+           ->  BitmapOr  (cost=9.08..9.08 rows=1 width=0) (never executed)
+                 ->  Bitmap Index Scan on idx_units_owner  (cost=0.00..4.54 rows=1 width=0) (never executed)
+                       Index Cond: (owner_id = app_get_user_id())
+                 ->  Bitmap Index Scan on idx_units_tenant  (cost=0.00..4.54 rows=1 width=0) (never executed)
+                       Index Cond: (tenant_id = app_get_user_id())
+ Planning Time: 0.433 ms
+ Execution Time: 0.867 ms
+(19 rows)
+
+ROLLBACK

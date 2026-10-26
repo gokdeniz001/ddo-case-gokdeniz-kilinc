@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+"net/url"
 	"os"
 	"strings"
 	"time"
@@ -151,8 +152,8 @@ func printSummaryTable() {
 }
 
 func truncate(s string, max int) string {
-	if len(s) > max {
-		return s[:max-3] + "..."
+	if len([]rune(s)) > max {
+		return string([]rune(s)[:max-3]) + "..."
 	}
 	return s
 }
@@ -165,7 +166,8 @@ func waitForAPI() {
 	fmt.Print("API servisine bağlanılıyor")
 	for i := 0; i < 30; i++ {
 		resp, err := client.Get(baseURL + "/health")
-		if err == nil && resp.StatusCode == http.StatusOK {
+		if resp != nil { _ = resp.Body.Close() }
+        if err == nil && resp.StatusCode == http.StatusOK {
 			fmt.Println(" [BAĞLANDI]")
 			return
 		}
@@ -257,203 +259,124 @@ func testUnauthorizedRoleAccess(token string) (bool, string) {
 	return resp.StatusCode == http.StatusForbidden, fmt.Sprintf("HTTP %d Forbidden ile yetkisiz istek engellendi", resp.StatusCode)
 }
 
-func testF1(token string) (bool, string) {
-	req, _ := http.NewRequest("GET", baseURL+"/api/v1/units", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return false, "Daire listesi alınamadı"
-	}
-	defer resp.Body.Close()
-	return true, "Site, blok ve daire kayıtları listelendi"
+
+var verifyUnit, verifyBlock, verifyPeriod, verifyOwner, verifyAccrual string
+var marker = fmt.Sprintf("verify-%d",time.Now().UnixNano())
+
+func call(method,path,token,key string,payload interface{},out interface{}) (int,error) {
+ data,err:=json.Marshal(payload);if err!=nil{return 0,err}
+ req,err:=http.NewRequest(method,baseURL+"/api/v1"+path,bytes.NewReader(data));if err!=nil{return 0,err}
+ req.Header.Set("Content-Type","application/json")
+ if token!="" {req.Header.Set("Authorization","Bearer "+token)}
+ if key!="" {req.Header.Set("Idempotency-Key",key)}
+ resp,err:=client.Do(req);if err!=nil{return 0,err};defer resp.Body.Close()
+ body,err:=io.ReadAll(resp.Body);if err!=nil{return resp.StatusCode,err}
+ if resp.StatusCode>=400{return resp.StatusCode,fmt.Errorf("HTTP %d: %s",resp.StatusCode,body)}
+ if out!=nil {err=json.Unmarshal(body,out)}
+ return resp.StatusCode,err
 }
-
-func testF2(token string) (bool, string) {
-	req, _ := http.NewRequest("GET", baseURL+"/api/v1/dues-definitions", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return false, "Aidat tanımları alınamadı"
-	}
-	defer resp.Body.Close()
-	return true, "Aidat tanımları ve tahakkuklar erişilebilir"
+func create(token,path string,payload interface{}) (string,error) {
+ var result struct{ID string `json:"id"`}
+ status,err:=call("POST",path,token,"",payload,&result)
+ if err!=nil{return "",err};if status!=201||result.ID==""{return "",fmt.Errorf("Create %s returned %d without ID",path,status)}
+ return result.ID,nil
 }
-
-func testF3(token string) (bool, string) {
-	req, _ := http.NewRequest("GET", baseURL+"/api/v1/debts", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return false, "Borç kayıtları alınamadı"
-	}
-	defer resp.Body.Close()
-	return true, "Tahsilat ve borç takibi uçları çalışıyor"
+func testF1(token string)(bool,string){
+ var me struct{ID string `json:"id"`}
+ if _,err:=call("GET","/auth/me",token,"",nil,&me);err!=nil{return false,err.Error()};verifyOwner=me.ID
+ var periods []struct{ID,Status string}
+ if _,err:=call("GET","/periods",token,"",nil,&periods);err!=nil{return false,err.Error()}
+ for _,p:=range periods{if p.Status=="OPEN"{verifyPeriod=p.ID;break}}
+ if verifyPeriod==""{return false,"Açık dönem bulunamadı"}
+ var err error
+ verifyBlock,err=create(token,"/blocks",map[string]interface{}{"name":marker,"total_floors":2});if err!=nil{return false,err.Error()}
+ verifyUnit,err=create(token,"/units",map[string]interface{}{"block_id":verifyBlock,"unit_number":"999","owner_id":verifyOwner,"land_share":100,"gross_area_m2":100,"resident_count":2})
+ return err==nil,fmt.Sprint(err)
 }
-
-func testF4(token string) (bool, string) {
-	req, _ := http.NewRequest("GET", baseURL+"/api/v1/expenses", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return false, "Gider kayıtları alınamadı"
-	}
-	defer resp.Body.Close()
-	return true, "Gider yönetimi uçları çalışıyor"
+func testF2(token string)(bool,string){
+ _,err:=create(token,"/dues-definitions",map[string]interface{}{"name":marker,"total_amount_cents":125433,"distribution_type":"LAND_SHARE","due_day":15,"late_fee_rate":5})
+ if err!=nil{return false,err.Error()}
+ return testT1(token)
 }
-
-func testF5(token string) (bool, string) {
-	req, _ := http.NewRequest("GET", baseURL+"/api/v1/announcements", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return false, "Duyurular alınamadı"
-	}
-	defer resp.Body.Close()
-	return true, "Duyuru, karar ve bakım talepleri aktif"
+func testF3(token string)(bool,string){
+ payload:=map[string]interface{}{"unit_id":verifyUnit,"amount_cents":1,"payment_date":"2026-10-26","payment_channel":"BANK_TRANSFER"}
+ var first,second struct{ID string `json:"id"`}
+ if status,err:=call("POST","/payments",token,marker,payload,&first);err!=nil||status!=201{return false,fmt.Sprint(err)}
+ if status,err:=call("POST","/payments",token,marker,payload,&second);err!=nil||status!=201||first.ID!=second.ID{return false,"Ödeme tekrarı aynı kaydı döndürmedi"}
+ payload["amount_cents"]=2
+ status,_:=call("POST","/payments",token,marker,payload,nil)
+ return status==409,"Tahsilat, kalıcı idempotans ve anahtar çakışması"
 }
-
-func testF6(token string) (bool, string) {
-	req, _ := http.NewRequest("GET", baseURL+"/api/v1/periods", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return false, "Mali dönemler alınamadı"
-	}
-	defer resp.Body.Close()
-	return true, "Muhasebe defteri ve dönem kapanış uçları aktif"
+func testF4(token string)(bool,string){
+ _,err:=create(token,"/expenses",map[string]interface{}{"period_id":verifyPeriod,"category":"CLEANING","title":marker,"vendor_name":"Verify","amount_cents":100,"invoice_date":"2026-10-26"})
+ return err==nil,fmt.Sprint(err)
 }
-
-func testF7(token string) (bool, string) {
-	req, _ := http.NewRequest("GET", baseURL+"/api/v1/reports/summary", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return false, "Finansal özet alınamadı"
-	}
-	defer resp.Body.Close()
-	return true, "Finansal raporlar ve özetler üretildi"
+func testF5(token string)(bool,string){
+ for _,item:=range []struct{path string;body map[string]interface{}}{
+ {"/announcements",map[string]interface{}{"title":marker,"content":"Verify announcement","priority":"NORMAL"}},
+ {"/decisions",map[string]interface{}{"decision_number":marker,"decision_date":"2026-10-26","title":marker,"content":"Verify decision"}},
+ {"/maintenance",map[string]interface{}{"unit_id":verifyUnit,"title":marker,"description":"Verify maintenance"}},
+ }{id,err:=create(token,item.path,item.body);if err!=nil{return false,err.Error()};if item.path=="/maintenance"{if _,err:=call("PUT",item.path+"/"+id+"/status",token,"",map[string]interface{}{"status":"IN_PROGRESS"},nil);err!=nil{return false,err.Error()}}}
+ return true,"Duyuru, karar, bakım kaydı ve durum geçişi"
 }
-
-func testT1(token string) (bool, string) {
-	// First fetch period id
-	req, _ := http.NewRequest("GET", baseURL+"/api/v1/periods", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return false, "Dönem alınamadı"
-	}
-	defer resp.Body.Close()
-
-	var periods []struct {
-		ID string `json:"id"`
-	}
-	_ = json.NewDecoder(resp.Body).Decode(&periods)
-	if len(periods) == 0 {
-		return false, "Açık dönem bulunamadı"
-	}
-
-	// Trigger accrual with Largest Remainder distribution
-	payload, _ := json.Marshal(map[string]interface{}{
-		"period_id":          periods[0].ID,
-		"title":              "Kasım 2026 Test Tahakkuku",
-		"term_month":         "2026-11",
-		"distribution_type":  "LAND_SHARE",
-		"total_amount_cents": 125433, // 1,254.33 TL - Irregular amount to verify Largest Remainder cents
-		"due_day":            15,
-	})
-
-	accReq, _ := http.NewRequest("POST", baseURL+"/api/v1/accruals", bytes.NewBuffer(payload))
-	accReq.Header.Set("Authorization", "Bearer "+token)
-	accReq.Header.Set("Content-Type", "application/json")
-
-	accResp, err := client.Do(accReq)
-	if err != nil || accResp.StatusCode != http.StatusCreated {
-		return false, "Tahakkuk oluşturulamadı"
-	}
-	defer accResp.Body.Close()
-
-	return true, "Tahakkuk kuruşu kuruşuna En Büyük Kalan Yöntemi ile dağıtıldı"
+func testF6(token string)(bool,string){
+ var accounts []struct{ID,Code string}
+ if _,err:=call("GET","/ledger-accounts",token,"",nil,&accounts);err!=nil{return false,err.Error()}
+ var debit,credit string;for _,a:=range accounts{if a.Code=="102"{debit=a.ID};if a.Code=="120"{credit=a.ID}}
+ if debit==""||credit==""{return false,"Muhasebe hesapları eksik"}
+ payload:=map[string]interface{}{"period_id":verifyPeriod,"entry_date":"2026-10-26","description":marker,"lines":[]map[string]interface{}{{"AccountID":debit,"DebitCents":100},{"AccountID":credit,"CreditCents":100}}}
+ id,err:=create(token,"/journal-entries",payload);if err!=nil{return false,err.Error()}
+ if _,err:=create(token,"/journal-entries/"+id+"/reverse",nil);err!=nil{return false,err.Error()}
+ var entries []struct{ID string;Debit int64 `json:"total_debit_cents"`;Credit int64 `json:"total_credit_cents"`}
+ if _,err:=call("GET","/journal-entries",token,"",nil,&entries);err!=nil{return false,err.Error()}
+ found:=false;for _,e:=range entries{if e.ID==id{found=e.Debit==100&&e.Credit==100}}
+ if !found{return false,"Yevmiye satırları veya çift taraflı toplamlar okunamadı"}
+ start:=time.Date(3000+int(time.Now().UnixMilli()%5000),1,1,0,0,0,0,time.UTC)
+ period,err:=create(token,"/periods",map[string]interface{}{"name":marker,"start_date":start.Format("2006-01-02"),"end_date":start.AddDate(0,0,1).Format("2006-01-02")});if err!=nil{return false,err.Error()}
+ if _,err:=call("POST","/periods/"+period+"/close",token,"",nil,nil);err!=nil{return false,err.Error()}
+ payload["period_id"]=period
+ status,_:=call("POST","/journal-entries",token,"",payload,nil)
+ return status==400,"Çift taraflı fiş, ters kayıt, dönem kapanışı ve kapalı döneme yazma engeli"
 }
-
-func testT2(token string) (bool, string) {
-	// Test fuzzy bank statement matching
-	payload, _ := json.Marshal(map[string]string{
-		"raw_description": "A BLOK DAIRE: 5 AHMET YILMAZ AIDAT",
-	})
-	req, _ := http.NewRequest("POST", baseURL+"/api/v1/bank-statements/match", bytes.NewBuffer(payload))
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return false, "Banka dekontu bulanık eşleştirilemedi"
-	}
-	defer resp.Body.Close()
-
-	var match struct {
-		UnitNumber string  `json:"unit_number"`
-		Score      float64 `json:"score"`
-	}
-	_ = json.NewDecoder(resp.Body).Decode(&match)
-
-	return true, fmt.Sprintf("Dekont eşleşti: Daire %s (Güven skoru: %.2f)", match.UnitNumber, match.Score)
+func testF7(token string)(bool,string){
+ var summary map[string]interface{}
+ _,err:=call("GET","/reports/summary",token,"",nil,&summary)
+ return err==nil&&summary["total_collected_cents"]!=nil,fmt.Sprint(err)
 }
-
-func testT3(residentToken, auditorToken string) (bool, string) {
-	// Test 1: Resident queries debts - should only see their own
-	req, _ := http.NewRequest("GET", baseURL+"/api/v1/debts", nil)
-	req.Header.Set("Authorization", "Bearer "+residentToken)
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return false, "Sakin borç sorgusu başarısız"
-	}
-	defer resp.Body.Close()
-
-	// Test 2: Auditor attempts to CREATE an expense -> MUST RETURN 403 Forbidden
-	payload, _ := json.Marshal(map[string]interface{}{
-		"category":     "CLEANING",
-		"title":        "İzinsiz Denetçi Gideri",
-		"vendor_name":  "Denetçi Firması",
-		"amount_cents": 50000,
-	})
-	expReq, _ := http.NewRequest("POST", baseURL+"/api/v1/expenses", bytes.NewBuffer(payload))
-	expReq.Header.Set("Authorization", "Bearer "+auditorToken)
-	expReq.Header.Set("Content-Type", "application/json")
-
-	expResp, err := client.Do(expReq)
-	if err != nil {
-		return false, err.Error()
-	}
-	defer expResp.Body.Close()
-
-	if expResp.StatusCode != http.StatusForbidden {
-		return false, fmt.Sprintf("Denetim kurulu yazma koruması başarısız: HTTP %d", expResp.StatusCode)
-	}
-
-	return true, "RLS veri izolasyonu kanıtlandı: Sakin gizliliği ve Denetçi salt-okunur kuralı aktif"
+func testT1(token string)(bool,string){
+ payload:=map[string]interface{}{"period_id":verifyPeriod,"title":marker,"term_month":"2026-10","distribution_type":"LAND_SHARE","total_amount_cents":125433,"due_day":15}
+ id,err:=create(token,"/accruals",payload);if err!=nil{return false,err.Error()};verifyAccrual=id
+ var total int64;count:=0;after:=""
+ for {
+  var debts []struct{ID string `json:"id"`;Due string `json:"due_date"`;Accrual string `json:"accrual_id"`;Amount int64 `json:"principal_cents"`}
+  if _,err:=call("GET","/debts?limit=500&after="+url.QueryEscape(after),token,"",nil,&debts);err!=nil{return false,err.Error()}
+  for _,d:=range debts{if d.Accrual==id{total+=d.Amount;count++}}
+  if len(debts)<500{break};last:=debts[len(debts)-1];after=last.Due[:10]+","+last.ID
+ }
+ return total==125433&&count>0,fmt.Sprintf("Dağıtılan toplam: %d kuruş, borç sayısı: %d",total,count)
 }
-
-func testT4(token string) (bool, string) {
-	// Query certificate verification endpoint (public)
-	req, _ := http.NewRequest("GET", baseURL+"/api/v1/certificates", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return true, "T-4 muhasebe çift taraflı denetim ve belge servisi aktif"
-	}
-	defer resp.Body.Close()
-
-	var certs []struct {
-		VerificationCode string `json:"verification_code"`
-	}
-	_ = json.NewDecoder(resp.Body).Decode(&certs)
-
-	if len(certs) > 0 {
-		vResp, err := client.Get(baseURL + "/api/v1/certificates/verify/" + certs[0].VerificationCode)
-		if err == nil && vResp.StatusCode == http.StatusOK {
-			return true, "Borcu Yoktur belgesi SHA-256 kriptografik doğrulama ile onaylandı"
-		}
-	}
-
-	return true, "Çift taraflı yevmiye kaydı ve kilitli dönem mekanizması doğrulandı"
+func testT2(token string)(bool,string){
+ var match struct{Number string `json:"unit_number"`;Score float64 `json:"score"`}
+ _,err:=call("POST","/bank-statements/match",token,"",map[string]interface{}{"raw_description":"A BLOK DAIRE: 5 AHMET YILMAZ AIDAT"},&match)
+ return err==nil&&match.Number!=""&&match.Score>0,fmt.Sprintf("Daire=%s skor=%f hata=%v",match.Number,match.Score,err)
+}
+func testT3(resident,auditor string)(bool,string){
+ var units []struct{ID string}
+ if _,err:=call("GET","/units",resident,"",nil,&units);err!=nil{return false,err.Error()}
+ for _,u:=range units{if u.ID==verifyUnit{return false,"Sakin yöneticiye ait daireyi gördü"}}
+ status,_:=call("POST","/expenses",auditor,"",map[string]interface{}{"amount_cents":100},nil)
+ if status!=403{return false,"Denetçi yazma isteği engellenmedi"}
+ status,_=call("GET","/units","","",nil,nil)
+ return status==401,"Sakin gizliliği, denetçi yazma engeli ve anonim erişim engeli; doğrudan RLS kanıtı entegrasyon testlerinde"
+}
+func testT4(token string)(bool,string){
+ // Create an unindebted unit after the accrual tests, then issue and verify a real certificate.
+ unit,err:=create(token,"/units",map[string]interface{}{"block_id":verifyBlock,"unit_number":"998","owner_id":verifyOwner,"land_share":100,"gross_area_m2":100,"resident_count":1});if err!=nil{return false,err.Error()}
+ var cert struct{Code string `json:"verification_code"`}
+ if status,err:=call("POST","/certificates",token,"",map[string]interface{}{"unit_id":unit,"valid_days":30},&cert);err!=nil||status!=201||cert.Code==""{return false,fmt.Sprint(err)}
+ var result struct{Valid bool `json:"validity_status"`}
+ _,err=call("GET","/certificates/verify/"+cert.Code,"","",nil,&result)
+ if err!=nil||!result.Valid{return false,"Belge imzası doğrulanamadı"}
+ status,_:=call("POST","/certificates",token,"",map[string]interface{}{"unit_id":verifyUnit,"valid_days":30},nil)
+ return status==400,"Borçlu daire reddedildi, borçsuz daire belgesinin imzası doğrulandı"
 }

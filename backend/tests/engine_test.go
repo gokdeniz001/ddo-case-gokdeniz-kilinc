@@ -481,15 +481,31 @@ func TestT1_DistributionType_ResidentCount(t *testing.T) {
 
 func TestT2_LateFeeCalculation_DailySimpleInterest(t *testing.T) {
 	payService := service.NewPaymentService(service.NewAccrualEngine())
-	
+
 	// Principal 1,000.00 TL (100,000 cents), 5% monthly rate, 30 days overdue
 	principalCents := int64(100000)
 	monthlyRate := 5.0
 	daysOverdue := 30
-	
+
 	interest := payService.CalculateDelayInterest(principalCents, monthlyRate, daysOverdue)
 	// Expected ~5000 cents (50.00 TL)
 	if interest <= 0 {
 		t.Errorf("Expected positive delay interest, got %d", interest)
+	}
+}
+
+func TestT2_FuzzyRejectsAmbiguityAndFloorNumber(t *testing.T) {
+	svc := service.NewPaymentService(service.NewAccrualEngine())
+	a, b := uuid.New(), uuid.New()
+	units := []domain.Unit{{ID: a, BlockName: "A Blok", UnitNumber: "12", FloorNumber: 5, OwnerName: "Ahmet Yilmaz"}, {ID: b, BlockName: "B Blok", UnitNumber: "12", FloorNumber: 5, OwnerName: "Ahmet Yilmaz"}}
+	if _, err := svc.FuzzyMatchUnit("AHMET YILMAZ AIDAT", units); err == nil {
+		t.Fatal("Ambiguous owner must not be auto matched")
+	}
+	if _, err := svc.FuzzyMatchUnit("A BLOK DAIRE: 5 AIDAT", units); err == nil {
+		t.Fatal("Floor number must not match a unit")
+	}
+	match, err := svc.FuzzyMatchUnit("B BLOK DAIRE: 12 AIDAT", units)
+	if err != nil || match.UnitID != b {
+		t.Fatalf("Wrong block selected: %v %v", match, err)
 	}
 }

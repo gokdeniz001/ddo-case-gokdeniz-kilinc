@@ -1,6 +1,3 @@
-# Ignore go.sum - will be regenerated during build to avoid checksum mismatch
-go.sum
-
 # Ignore test files and docs
 tests/
 docs/

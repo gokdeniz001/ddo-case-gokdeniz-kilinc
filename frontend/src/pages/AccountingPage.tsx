@@ -15,8 +15,8 @@ export const AccountingPage: React.FC<AccountingPageProps> = ({ onNotify }) => {
     setLoading(true);
     try {
       const [accList, entryList] = await Promise.all([
-        api.getLedgerAccounts().catch(() => []),
-        api.getJournalEntries().catch(() => []),
+        api.getLedgerAccounts(),
+        api.getJournalEntries(),
       ]);
       setAccounts(accList);
       setEntries(entryList);

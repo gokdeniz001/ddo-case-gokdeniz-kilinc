@@ -1,9 +1,11 @@
 package service
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -16,9 +18,14 @@ type CertificateService struct {
 }
 
 func NewCertificateService() *CertificateService {
-	return &CertificateService{
-		secretSalt: "ddo-audit-clearance-hash-salt-0c7cc1",
+	secret := os.Getenv("CERTIFICATE_SECRET")
+	if secret == "" {
+		secret = os.Getenv("JWT_SECRET")
 	}
+	if secret == "" {
+		secret = "local-demo-signing-key-change-before-hosting"
+	}
+	return &CertificateService{secretSalt: secret}
 }
 
 // IssueClearanceCertificate generates an authenticatable, signed clearance certificate
@@ -38,13 +45,13 @@ func (s *CertificateService) IssueClearanceCertificate(
 	validUntil := issuedDate.AddDate(0, 0, validDays)
 	certID := uuid.New()
 
-	certNumber := fmt.Sprintf("BYB-%s-%s-%s", 
-		strings.ToUpper(site.Code), 
-		time.Now().Format("20060102"), 
+	certNumber := fmt.Sprintf("BYB-%s-%s-%s",
+		strings.ToUpper(site.Code),
+		time.Now().Format("20060102"),
 		strings.ToUpper(certID.String()[:8]))
 
-	verificationCode := strings.ToUpper(fmt.Sprintf("%s-%s", 
-		uuid.New().String()[:4], 
+	verificationCode := strings.ToUpper(fmt.Sprintf("%s-%s",
+		uuid.New().String()[:4],
 		uuid.New().String()[9:13]))
 
 	// Compute SHA-256 cryptographic proof
@@ -54,12 +61,12 @@ func (s *CertificateService) IssueClearanceCertificate(
 		user.ID.String(),
 		certNumber,
 		verificationCode,
-		issuedDate.Format("2006-01-02"),
+		issuedDate.Format("2006-01-02")+"/"+validUntil.Format("2006-01-02"),
 		totalDebtBalanceCents,
 		s.secretSalt,
 	)
 
-	hasher := sha256.New()
+	hasher := hmac.New(sha256.New, []byte(s.secretSalt))
 	hasher.Write([]byte(rawProof))
 	shaProof := hex.EncodeToString(hasher.Sum(nil))
 
@@ -90,14 +97,14 @@ func (s *CertificateService) VerifyHash(cert domain.ClearanceCertificate) bool {
 		cert.UserID.String(),
 		cert.CertificateNumber,
 		cert.VerificationCode,
-		cert.IssuedDate.Format("2006-01-02"),
+		cert.IssuedDate.Format("2006-01-02")+"/"+cert.ValidUntil.Format("2006-01-02"),
 		cert.DebtBalanceAtIssueCents,
 		s.secretSalt,
 	)
 
-	hasher := sha256.New()
+	hasher := hmac.New(sha256.New, []byte(s.secretSalt))
 	hasher.Write([]byte(rawProof))
 	expected := hex.EncodeToString(hasher.Sum(nil))
 
-	return expected == cert.Sha256Hash
+	return hmac.Equal([]byte(expected), []byte(cert.Sha256Hash))
 }

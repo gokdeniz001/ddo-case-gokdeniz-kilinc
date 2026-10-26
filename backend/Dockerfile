@@ -7,13 +7,8 @@ WORKDIR /app
 # Install git and ca-certificates
 RUN apk add --no-cache git ca-certificates
 
-# Disable sum verification to avoid go.sum checksum mismatch with upstream
-ENV GONOSUMDB=*
-ENV GOFLAGS=-mod=mod
-
-# Copy dependency files and download (go.sum excluded via .dockerignore, will be regenerated)
-COPY go.mod ./
-RUN go mod download && go mod tidy
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
 
 # Copy source code
 COPY . .

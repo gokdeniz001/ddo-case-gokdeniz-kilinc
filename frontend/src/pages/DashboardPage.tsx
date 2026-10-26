@@ -16,8 +16,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNotify }) => {
     setLoading(true);
     try {
       const [sumData, debtData] = await Promise.all([
-        api.getFinancialSummary().catch(() => null),
-        api.getDebts().catch(() => []),
+        api.getFinancialSummary(),
+        api.getDebts(),
       ]);
       setSummary(sumData);
       setDebts(debtData);
@@ -46,7 +46,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNotify }) => {
         <StatCard
           label="TOPLAM TAHAKKUK"
           value={formatCents(summary?.total_accruals_cents || 0)}
-          meta="3 Dönemlik Resmi Tahakkuk"
+          meta="Kayıtlı dönemlerin toplamı"
           valueColor="#60a5fa"
           metaColor="#93c5fd"
         />

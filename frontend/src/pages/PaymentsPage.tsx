@@ -1,12 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { CreditCard, Search, CheckCircle2, Clock } from 'lucide-react';
-import { api, formatCents, BankStatement } from '../services/api';
+import { api, apiRequest, formatCents, BankStatement } from '../services/api';
 
 interface PaymentsPageProps {
+  readOnly?: boolean;
   onNotify: (msg: { type: 'success' | 'error'; text: string }) => void;
 }
 
-export const PaymentsPage: React.FC<PaymentsPageProps> = ({ onNotify }) => {
+export const PaymentsPage: React.FC<PaymentsPageProps> = ({ onNotify, readOnly }) => {
+  const [units, setUnits] = useState<any[]>([]);
+  const [paymentUnit, setPaymentUnit] = useState('');
+  const [amount, setAmount] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [paymentKey, setPaymentKey] = useState(() => crypto.randomUUID());
+  useEffect(() => {api.getUnits().then(setUnits).catch(e=>onNotify({type:'error',text:e.message}));}, []);
   const [bankDescInput, setBankDescInput] = useState('');
   const [matchResult, setMatchResult] = useState<any>(null);
   const [matching, setMatching] = useState(false);
@@ -25,6 +32,7 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({ onNotify }) => {
       setMatching(true);
       const res = await api.fuzzyMatchStatement(bankDescInput);
       setMatchResult(res);
+      setPaymentUnit(res.unit_id);
       onNotify({
         type: 'success',
         text: `Eşleşme bulundu: Daire ${res.unit_number} (%${Math.round(res.score * 100)} güven skoru)`,
@@ -45,6 +53,28 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({ onNotify }) => {
           Şelale Dağıtım Kuralı (Önce Gecikme Zammı → Anapara → FIFO) ve Bulanık Metin Eşleştirme Motoru.
         </p>
       </div>
+
+      {!readOnly && <form className="glass-card community-form" style={{padding:20,marginBottom:24}} onSubmit={async e=>{
+        e.preventDefault();setSaving(true);
+        try {
+          const [whole,fraction='']=amount.replace(',','.').split('.');
+          if(!/^\d+$/.test(whole)||!/^\d{0,2}$/.test(fraction)) throw new Error('Tutar en fazla iki ondalık basamak içermeli');
+          const cents=Number(whole)*100+Number(fraction.padEnd(2,'0'));
+          if(!Number.isSafeInteger(cents)||cents<=0)throw new Error('Geçersiz tutar');
+          const result:any=await api.processPayment({unit_id:paymentUnit,amount_cents:cents,payment_date:new Date().toISOString().slice(0,10),payment_channel:'BANK_TRANSFER',bank_reference:paymentKey,description:'Arayüz tahsilatı',idempotency_key:paymentKey});
+          onNotify({type:'success',text:`Tahsilat kaydedildi. Avans: ${formatCents(result.unallocated_cents)}`});setPaymentKey(crypto.randomUUID());setAmount('');
+        }catch(e:any){onNotify({type:'error',text:e.message});}finally{setSaving(false);}
+      }}>
+        <h3>Tahsilat kaydet</h3>
+        <label>Daire<select aria-label="Tahsilat dairesi" className="input-field" required value={paymentUnit} onChange={e=>{setPaymentUnit(e.target.value);setPaymentKey(crypto.randomUUID());}}><option value="">Daire seçin</option>{units.filter(u=>u.owner_name||u.tenant_name).map(u=><option key={u.id} value={u.id}>{u.block_name} / {u.unit_number} — {u.owner_name||u.tenant_name}</option>)}</select></label>
+        <label>Tutar (TL)<input className="input-field" inputMode="decimal" required value={amount} onChange={e=>{setAmount(e.target.value);setPaymentKey(crypto.randomUUID());}} placeholder="1500,00" /></label>
+        <button className="btn btn-primary" disabled={saving}>{saving?'Kaydediliyor…':'Tahsilatı kaydet'}</button>
+        <label>Banka ekstresi CSV içe aktar<input className="input-field" type="file" accept=".csv,text/csv" onChange={async e=>{
+          const file=e.target.files?.[0];if(!file)return;
+          try {const result:any=await apiRequest('/bank-statements/import',{method:'POST',headers:{'Idempotency-Key':crypto.randomUUID()},body:JSON.stringify({csv:await file.text()})});setBankStatements(await api.getBankStatements());onNotify({type:'success',text:`${result.imported} satır alındı, ${result.matched} daire eşleşti`});}catch(e:any){onNotify({type:'error',text:e.message});}
+        }} /></label>
+        <small>CSV başlığı: date,reference,description,amount_cents. Eşleşme tahsilatı kendiliğinden kaydetmez; daireyi ve tutarı kontrol ederek yukarıdan kaydedin.</small>
+      </form>}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
         {/* Fuzzy Matching Simulator */}

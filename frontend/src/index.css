@@ -595,3 +595,21 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+
+/* Shared form controls are used by all data entry screens. */
+.input-field {
+  width: 100%; min-width: 0; padding: 10px 12px; margin-top: 6px;
+  color: var(--text-main); background: #111827; border: 1px solid var(--border-glass);
+  border-radius: 8px; font: inherit;
+}
+.input-field:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+textarea.input-field { min-height: 100px; resize: vertical; }
+.community-form { display: flex; flex-direction: column; gap: 14px; }
+.main-wrapper { min-width: 0; }
+@media (max-width: 600px) {
+  .content-body { padding: 18px 12px; }
+  .topbar { flex-wrap: wrap; gap: 12px; padding: 12px; }
+  .topbar-site-select { min-width: 0; flex-wrap: wrap; }
+  .page-container > div[style*="grid"] { grid-template-columns: 1fr !important; }
+  h1 { overflow-wrap: anywhere; }
+}

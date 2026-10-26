@@ -2,8 +2,9 @@ package service
 
 import (
 	"errors"
-	"math"
+	"math/big"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,10 +23,10 @@ type UnitShareInput struct {
 }
 
 type OwnershipTransfer struct {
-	OldUserID  uuid.UUID
-	NewUserID  uuid.UUID
-	ActiveDaysOld int
-	ActiveDaysNew int
+	OldUserID        uuid.UUID
+	NewUserID        uuid.UUID
+	ActiveDaysOld    int
+	ActiveDaysNew    int
 	TotalDaysInMonth int
 }
 
@@ -64,81 +65,51 @@ func (e *AccrualEngine) DistributeDues(
 		return nil, errors.New("no eligible units available for distribution")
 	}
 
-	// Calculate total base according to distribution type
-	var totalBase float64
-	for _, u := range eligibleUnits {
+	type unitCalc struct {
+		unit      UnitShareInput
+		intShare  int64
+		remainder *big.Rat
+		index     int
+	}
+	bases := make([]*big.Rat, len(eligibleUnits))
+	totalBase := new(big.Rat)
+	for i, u := range eligibleUnits {
+		weight := "1"
 		switch distType {
 		case domain.DistEqual:
-			totalBase += 1.0
 		case domain.DistLandShare:
-			totalBase += float64(u.LandShare)
+			weight = strconv.Itoa(u.LandShare)
 		case domain.DistAreaM2:
-			totalBase += u.GrossAreaM2
+			weight = strconv.FormatFloat(u.GrossAreaM2, 'f', 2, 64)
 		case domain.DistResidentCount:
-			totalBase += float64(u.ResidentCount)
+			weight = strconv.Itoa(u.ResidentCount)
 		default:
 			return nil, errors.New("unsupported distribution type")
 		}
+		base, ok := new(big.Rat).SetString(weight)
+		if !ok || base.Sign() < 0 {
+			return nil, errors.New("invalid distribution weight")
+		}
+		bases[i] = base
+		totalBase.Add(totalBase, base)
 	}
-
-	if totalBase <= 0 {
-		return nil, errors.New("total distribution basis must be greater than zero")
+	if totalBase.Sign() <= 0 {
+		return nil, errors.New("total distribution basis must be positive")
 	}
-
-	type unitCalc struct {
-		unit       UnitShareInput
-		exactQuota float64
-		intShare   int64
-		remainder  float64
-		index      int
-	}
-
 	calcs := make([]unitCalc, len(eligibleUnits))
-	var allocatedSoFar int64 = 0
-
+	var allocatedSoFar int64
 	for i, u := range eligibleUnits {
-		var unitBase float64
-		switch distType {
-		case domain.DistEqual:
-			unitBase = 1.0
-		case domain.DistLandShare:
-			unitBase = float64(u.LandShare)
-		case domain.DistAreaM2:
-			unitBase = u.GrossAreaM2
-		case domain.DistResidentCount:
-			unitBase = float64(u.ResidentCount)
-		}
-
-		quota := (unitBase / totalBase) * float64(totalAmountCents)
-		floorQuota := int64(math.Floor(quota))
-		rem := quota - float64(floorQuota)
-
-		calcs[i] = unitCalc{
-			unit:       u,
-			exactQuota: quota,
-			intShare:   floorQuota,
-			remainder:  rem,
-			index:      i,
-		}
-		allocatedSoFar += floorQuota
+		quota := new(big.Rat).Mul(bases[i], new(big.Rat).SetInt64(totalAmountCents))
+		quota.Quo(quota, totalBase)
+		whole := new(big.Int).Quo(quota.Num(), quota.Denom()).Int64()
+		rem := new(big.Rat).Sub(quota, new(big.Rat).SetInt64(whole))
+		calcs[i] = unitCalc{unit: u, intShare: whole, remainder: rem, index: i}
+		allocatedSoFar += whole
 	}
-
-	// Largest Remainder Method: distribute remaining cents based on highest remainder
-	remainingCents := totalAmountCents - allocatedSoFar
-	if remainingCents > 0 {
-		// Sort by remainder descending, tie-break by unit index
-		sort.Slice(calcs, func(i, j int) bool {
-			if calcs[i].remainder == calcs[j].remainder {
-				return calcs[i].index < calcs[j].index
-			}
-			return calcs[i].remainder > calcs[j].remainder
-		})
-
-		for i := 0; i < int(remainingCents); i++ {
-			calcs[i%len(calcs)].intShare += 1
-		}
+	sort.SliceStable(calcs, func(i, j int) bool { return calcs[i].remainder.Cmp(calcs[j].remainder) > 0 })
+	for i := int64(0); i < totalAmountCents-allocatedSoFar; i++ {
+		calcs[i].intShare++
 	}
-
 	// Double check exact sum
 	var checkSum int64 = 0
 	for _, c := range calcs {
@@ -156,7 +127,10 @@ func (e *AccrualEngine) DistributeDues(
 			if tr.TotalDaysInMonth <= 0 {
 				tr.TotalDaysInMonth = 30
 			}
-			oldShare := int64(math.Round(float64(c.intShare) * float64(tr.ActiveDaysOld) / float64(tr.TotalDaysInMonth)))
+			if tr.ActiveDaysOld < 0 || tr.ActiveDaysNew < 0 || tr.ActiveDaysOld+tr.ActiveDaysNew != tr.TotalDaysInMonth {
+				return nil, errors.New("invalid ownership transfer days")
+			}
+			oldShare := roundRatio(new(big.Int).Mul(big.NewInt(c.intShare), big.NewInt(int64(tr.ActiveDaysOld))), big.NewInt(int64(tr.TotalDaysInMonth)))
 			newShare := c.intShare - oldShare
 
 			if oldShare > 0 {
@@ -199,9 +173,17 @@ func (e *AccrualEngine) CalculateLateFee(principalCents int64, monthlyRatePercen
 		return 0
 	}
 
-	// Daily rate based on 30-day month convention: (monthlyRate / 100) / 30
-	dailyRate := (monthlyRatePercent / 100.0) / 30.0
-	fee := float64(principalCents) * dailyRate * float64(daysOverdue)
+	rate, ok := new(big.Rat).SetString(strconv.FormatFloat(monthlyRatePercent, 'f', -1, 64))
+	if !ok {
+		return 0
+	}
+	fee := new(big.Rat).Mul(new(big.Rat).SetInt64(principalCents), rate)
+	fee.Mul(fee, new(big.Rat).SetFrac(big.NewInt(daysOverdue), big.NewInt(3000)))
+	return roundRatio(fee.Num(), fee.Denom())
+}
 
-	return int64(math.Round(fee))
+func roundRatio(num, den *big.Int) int64 {
+	n := new(big.Int).Mul(num, big.NewInt(2))
+	n.Add(n, den)
+	return n.Quo(n, new(big.Int).Mul(den, big.NewInt(2))).Int64()
 }

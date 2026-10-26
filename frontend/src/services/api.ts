@@ -108,7 +108,24 @@ export function setStoredToken(token: string) {
 
 export function clearStoredToken() {
   localStorage.removeItem('siteyonet_token');
+  localStorage.removeItem('siteyonet_refresh');
   localStorage.removeItem('siteyonet_user');
+}
+
+let refreshPending: Promise<string | null> | null = null;
+function refreshAccess(): Promise<string | null> {
+  if (refreshPending) return refreshPending;
+  refreshPending = (async () => {
+    const refresh = localStorage.getItem('siteyonet_refresh');
+    if (!refresh) return null;
+    try {
+      const response=await fetch(`${API_BASE}/auth/refresh`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:refresh})});
+      if(!response.ok) return null;
+      const session=await response.json();setStoredToken(session.token);localStorage.setItem('siteyonet_refresh',session.refresh_token);
+      return session.token as string;
+    } catch {return null;}
+  })().finally(()=>{refreshPending=null;});
+  return refreshPending;
 }
 
 export async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -122,11 +139,15 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${endpoint}`, {
+  let res = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
     headers,
   });
 
+  if (res.status === 401 && !endpoint.startsWith('/auth/')) {
+    const token = await refreshAccess();
+    if (token) {headers.Authorization=`Bearer ${token}`;res=await fetch(`${API_BASE}${endpoint}`,{...options,headers});}
+  }
   if (!res.ok) {
     let errMessage = 'İşlem başarısız oldu';
     try {
@@ -146,11 +167,12 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
 export const api = {
   // Auth
   login: async (email: string, pass: string = 'password123') => {
-    const res = await apiRequest<{ token: string; user: User; site?: Site }>('/auth/login', {
+    const res = await apiRequest<{ token: string; refresh_token: string; user: User; site?: Site }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password: pass }),
     });
     setStoredToken(res.token);
+    localStorage.setItem('siteyonet_refresh',res.refresh_token);
     localStorage.setItem('siteyonet_user', JSON.stringify(res.user));
     return res;
   },
@@ -162,7 +184,17 @@ export const api = {
   getUnits: () => apiRequest<Unit[]>('/units'),
 
   // Debts & Payments (T-2)
-  getDebts: (unitId?: string) => apiRequest<Debt[]>(unitId ? `/debts?unit_id=${unitId}` : '/debts'),
+  getDebts: async (unitId?: string) => {
+    const all: Debt[] = []; let after = '';
+    while (true) {
+      const query = new URLSearchParams({limit:'500'});
+      if (unitId) query.set('unit_id',unitId);
+      if (after) query.set('after',after);
+      const page=await apiRequest<Debt[]>(`/debts?${query}`);all.push(...page);
+      if(page.length<500) return all;
+      const last=page[page.length-1];after=`${last.due_date.slice(0,10)},${last.id}`;
+    }
+  },
   processPayment: (payload: {
     unit_id: string;
     amount_cents: number;
@@ -171,7 +203,7 @@ export const api = {
     description: string;
     payment_date: string;
     idempotency_key?: string;
-  }) => apiRequest('/payments', { method: 'POST', body: JSON.stringify(payload) }),
+  }) => apiRequest('/payments', { method: 'POST', headers: { 'Idempotency-Key': payload.idempotency_key || crypto.randomUUID() }, body: JSON.stringify(payload) }),
 
   fuzzyMatchStatement: (rawDescription: string) =>
     apiRequest<{ unit_number: string; block_name: string; score: number; unit_id: string }>('/bank-statements/match', {
@@ -226,9 +258,11 @@ export const api = {
 };
 
 export function formatCents(cents: number): string {
-  const liras = Math.floor(cents / 100);
-  const krs = Math.abs(cents % 100);
-  return `${liras.toLocaleString('tr-TR')},${krs.toString().padStart(2, '0')} ₺`;
+  const sign = cents < 0 ? '-' : '';
+  const absolute = Math.abs(cents);
+  const liras = Math.floor(absolute / 100);
+  const krs = absolute % 100;
+  return `${sign}${liras.toLocaleString('tr-TR')},${krs.toString().padStart(2, '0')} ₺`;
 }
 
 export function normalizeTurkish(text: string): string {

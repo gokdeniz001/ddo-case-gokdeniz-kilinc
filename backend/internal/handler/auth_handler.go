@@ -18,10 +18,11 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
-	Token     string      `json:"token"`
-	ExpiresAt time.Time   `json:"expires_at"`
-	User      domain.User `json:"user"`
-	Site      *domain.Site `json:"site,omitempty"`
+	RefreshToken string       `json:"refresh_token"`
+	Token        string       `json:"token"`
+	ExpiresAt    time.Time    `json:"expires_at"`
+	User         domain.User  `json:"user"`
+	Site         *domain.Site `json:"site,omitempty"`
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -87,17 +88,27 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate JWT (24 hours validity)
-	duration := 24 * time.Hour
+	duration := time.Hour
 	token, err := appMiddleware.GenerateToken(user.ID, effectiveSiteID, user.Role, user.Email, user.FullName, duration)
 	if err != nil {
 		appMiddleware.RespondError(w, http.StatusInternalServerError, "TOKEN_ERROR", "Token oluşturulamadı")
 		return
 	}
 
+	refresh, hash, err := refreshPair()
+	if err != nil {
+		appMiddleware.RespondError(w, 500, "TOKEN_ERROR", "Token üretilemedi")
+		return
+	}
+	if _, err = h.db.Pool.Exec(ctx, `INSERT INTO "fy-refresh-sessions" (token_hash,user_id,site_id,expires_at) VALUES ($1,$2,$3,$4)`, hash, user.ID, user.SiteID, time.Now().Add(7*24*time.Hour)); err != nil {
+		appMiddleware.RespondError(w, 500, "DB_ERROR", "Oturum kaydedilemedi")
+		return
+	}
 	resp := LoginResponse{
-		Token:     token,
-		ExpiresAt: time.Now().Add(duration),
-		User:      user,
+		RefreshToken: refresh,
+		Token:        token,
+		ExpiresAt:    time.Now().Add(duration),
+		User:         user,
 	}
 	if siteID != nil {
 		resp.Site = &site

@@ -23,8 +23,8 @@ export const CertificatesPage: React.FC<CertificatesPageProps> = ({ onNotify }) 
   const loadData = async () => {
     try {
       const [certs, unitList] = await Promise.all([
-        api.getCertificates().catch(() => []),
-        api.getUnits().catch(() => []),
+        api.getCertificates(),
+        api.getUnits(),
       ]);
       setCertificates(certs || []);
       setUnits(unitList || []);

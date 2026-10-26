@@ -143,6 +143,718 @@ paths:
         '200':
           description: Belge geçerlilik durumu ve SHA-256 hash doğrulaması
 
+  /api/v1/auth/refresh:
+    post:
+      summary: Refresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            example: {"refresh_token": "{{managerLogin.response.body.refresh_token}}"}
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/auth/me:
+    get:
+      summary: GetMe
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/auth/site:
+    post:
+      summary: SwitchSite
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            example: {"site_id": "{{managerLogin.response.body.site.id}}"}
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/sites:
+    get:
+      summary: ListSites
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/sites/{id}:
+    get:
+      summary: GetSite
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/blocks:
+    get:
+      summary: ListBlocks
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+    post:
+      summary: CreateBlock
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            example: {"name": "REST-{{$timestamp}}", "total_floors": 2}
+      responses:
+        '201':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/units/{id}/transfer:
+    post:
+      summary: TransferOwnership
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            example: {"new_owner_id": "{{residentLogin.response.body.user.id}}", "transfer_date": "2026-10-11"}
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/dues-definitions:
+    get:
+      summary: ListDuesDefinitions
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+    post:
+      summary: CreateDuesDefinition
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            example: {"name": "REST Aidat", "total_amount_cents": 125433, "distribution_type": "LAND_SHARE", "due_day": 15, "late_fee_rate": 5}
+      responses:
+        '201':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/accruals/{id}/reverse:
+    post:
+      summary: ReverseAccrual
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/debts:
+    get:
+      summary: ListDebts
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/debts/restructure:
+    post:
+      summary: RestructureDebts
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '201':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/bank-statements:
+    get:
+      summary: ListBankStatements
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/expenses:
+    get:
+      summary: ListExpenses
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+    post:
+      summary: CreateExpense
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '201':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/announcements:
+    get:
+      summary: ListAnnouncements
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+    post:
+      summary: CreateAnnouncement
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            example: {"title": "REST Duyuru", "content": "Deneme duyurusu", "priority": "NORMAL"}
+      responses:
+        '201':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/decisions:
+    get:
+      summary: ListDecisions
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+    post:
+      summary: CreateDecision
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            example: {"decision_number": "REST-{{$timestamp}}", "decision_date": "2026-10-26", "title": "REST Karar", "content": "Deneme kararı", "vote_summary": "Oy birliği"}
+      responses:
+        '201':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/maintenance:
+    get:
+      summary: ListMaintenanceRequests
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+    post:
+      summary: CreateMaintenanceRequest
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            example: {"unit_id": "{{firstUnitId}}", "title": "REST Bakım", "description": "Deneme talebi", "priority": "MEDIUM"}
+      responses:
+        '201':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/maintenance/{id}/status:
+    put:
+      summary: UpdateMaintenanceStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            example: {"status": "IN_PROGRESS"}
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/periods:
+    get:
+      summary: ListFiscalPeriods
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+    post:
+      summary: CreateFiscalPeriod
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            example: {"name": "REST Deneme Dönemi", "start_date": "2999-01-01", "end_date": "2999-12-31"}
+      responses:
+        '201':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/periods/{id}/close:
+    post:
+      summary: CloseFiscalPeriod
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/ledger-accounts:
+    get:
+      summary: ListLedgerAccounts
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/journal-entries:
+    get:
+      summary: ListJournalEntries
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+    post:
+      summary: CreateJournalEntry
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            example: {"period_id": "{{periodId}}", "entry_date": "2026-10-26", "description": "REST Fiş", "lines": [{"AccountID": "{{getLedgerAccounts.response.body.0.id}}", "DebitCents": 100}, {"AccountID": "{{getLedgerAccounts.response.body.1.id}}", "CreditCents": 100}]}
+      responses:
+        '201':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/journal-entries/{id}/reverse:
+    post:
+      summary: ReverseJournalEntry
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/reports/summary:
+    get:
+      summary: GetFinancialSummary
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/reports/budget-comparison:
+    get:
+      summary: GetBudgetComparison
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/budgets:
+    post:
+      summary: SaveBudget
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            example: {"category": "CLEANING", "amount_cents": 2000000}
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/reports/reconciliation:
+    get:
+      summary: Reconciliation
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/certificates:
+    get:
+      summary: ListCertificates
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+    post:
+      summary: IssueClearanceCertificate
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '201':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/audit-logs:
+    get:
+      summary: ListAuditLogs
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+        '400':
+          description: Invalid input
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+
+  /api/v1/bank-statements/import:
+    post:
+      summary: CSV banka ekstresini içe aktar ve daireleri eşleştir
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [csv]
+              properties:
+                csv:
+                  type: string
+                  description: "date,reference,description,amount_cents başlıklı CSV metni"
+      responses:
+        '201':
+          description: İçeri alınan, eşleşen ve eşleşmeyen satır sayıları
+        '400':
+          description: Tarih, tam sayı kuruş tutarı veya CSV başlığı geçersiz
+        '403':
+          description: Yönetici veya muhasebe rolü gerekli
+
 components:
   securitySchemes:
     BearerAuth:

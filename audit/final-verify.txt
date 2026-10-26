@@ -1,0 +1,132 @@
+=== RUN   TestT1_LargestRemainderMethod_CentExactEqual
+--- PASS: TestT1_LargestRemainderMethod_CentExactEqual (0.00s)
+=== RUN   TestT1_LargestRemainderMethod_CentExactLandShare
+--- PASS: TestT1_LargestRemainderMethod_CentExactLandShare (0.00s)
+=== RUN   TestT1_ExemptUnitsExcluded
+--- PASS: TestT1_ExemptUnitsExcluded (0.00s)
+=== RUN   TestT1_MidPeriodOwnershipTransfer_Prorata
+--- PASS: TestT1_MidPeriodOwnershipTransfer_Prorata (0.00s)
+=== RUN   TestT2_WaterfallAllocation_InterestThenPrincipalThenFIFO
+--- PASS: TestT2_WaterfallAllocation_InterestThenPrincipalThenFIFO (0.00s)
+=== RUN   TestT2_Overpayment_StoredAsUnallocatedCredit
+--- PASS: TestT2_Overpayment_StoredAsUnallocatedCredit (0.00s)
+=== RUN   TestT2_FuzzyMatchBankStatement
+--- PASS: TestT2_FuzzyMatchBankStatement (0.00s)
+=== RUN   TestT2_DebtRestructurePlan
+--- PASS: TestT2_DebtRestructurePlan (0.00s)
+=== RUN   TestT4_DoubleEntryValidation
+--- PASS: TestT4_DoubleEntryValidation (0.00s)
+=== RUN   TestT4_ReversalJournalEntry
+--- PASS: TestT4_ReversalJournalEntry (0.00s)
+=== RUN   TestT4_ClearanceCertificate_EnforceZeroDebtAndCryptographicProof
+--- PASS: TestT4_ClearanceCertificate_EnforceZeroDebtAndCryptographicProof (0.00s)
+=== RUN   TestConcurrency_BalanceRaceConditionProtection
+--- PASS: TestConcurrency_BalanceRaceConditionProtection (0.01s)
+=== RUN   TestT1_DistributionType_AreaM2
+--- PASS: TestT1_DistributionType_AreaM2 (0.00s)
+=== RUN   TestT1_DistributionType_ResidentCount
+--- PASS: TestT1_DistributionType_ResidentCount (0.00s)
+=== RUN   TestT2_LateFeeCalculation_DailySimpleInterest
+--- PASS: TestT2_LateFeeCalculation_DailySimpleInterest (0.00s)
+=== RUN   TestT2_FuzzyRejectsAmbiguityAndFloorNumber
+--- PASS: TestT2_FuzzyRejectsAmbiguityAndFloorNumber (0.00s)
+=== RUN   TestIntegration_AnonymousEndpointsDenied
+2026/10/26 19:24:07 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_AnonymousEndpointsDenied (0.35s)
+=== RUN   TestIntegration_ResidentUnitPrivacy
+2026/10/26 19:24:07 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_ResidentUnitPrivacy (0.29s)
+=== RUN   TestIntegration_ResidentDebtPrivacy
+2026/10/26 19:24:08 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_ResidentDebtPrivacy (0.30s)
+=== RUN   TestIntegration_RLSCrossSiteBlocked
+2026/10/26 19:24:08 PostgreSQL connection pool initialized successfully
+2026/10/26 19:24:08 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_RLSCrossSiteBlocked (0.64s)
+=== RUN   TestIntegration_AuditorCannotWrite
+2026/10/26 19:24:09 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_AuditorCannotWrite (0.30s)
+=== RUN   TestIntegration_PaymentAndAudit
+2026/10/26 19:24:09 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_PaymentAndAudit (0.31s)
+=== RUN   TestIntegration_IdempotencyReplayAndConflict
+2026/10/26 19:24:09 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_IdempotencyReplayAndConflict (0.38s)
+=== RUN   TestIntegration_ConcurrentPayments
+2026/10/26 19:24:10 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_ConcurrentPayments (0.86s)
+=== RUN   TestIntegration_MaintenanceTransition
+2026/10/26 19:24:11 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_MaintenanceTransition (0.28s)
+=== RUN   TestIntegration_ClosedPeriodRejectsJournal
+2026/10/26 19:24:11 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_ClosedPeriodRejectsJournal (0.35s)
+=== RUN   TestIntegration_CertificateDebtAndVerification
+2026/10/26 19:24:11 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_CertificateDebtAndVerification (0.35s)
+=== RUN   TestIntegration_AccrualCentExactAPI
+2026/10/26 19:24:12 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_AccrualCentExactAPI (0.40s)
+=== RUN   TestIntegration_RestructureAPI
+2026/10/26 19:24:12 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_RestructureAPI (0.31s)
+=== RUN   TestIntegration_IdempotencyConcurrentSameKey
+2026/10/26 19:24:12 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_IdempotencyConcurrentSameKey (0.40s)
+=== RUN   TestIntegration_CrossSiteUnitReferenceRejected
+2026/10/26 19:24:13 PostgreSQL connection pool initialized successfully
+2026/10/26 19:24:13 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_CrossSiteUnitReferenceRejected (0.54s)
+=== RUN   TestIntegration_RefreshTokenRotation
+2026/10/26 19:24:13 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_RefreshTokenRotation (0.31s)
+=== RUN   TestIntegration_MultiSiteSwitch
+2026/10/26 19:24:13 PostgreSQL connection pool initialized successfully
+2026/10/26 19:24:14 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_MultiSiteSwitch (0.54s)
+=== RUN   TestIntegration_OwnershipDaySplitAPI
+2026/10/26 19:24:14 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_OwnershipDaySplitAPI (0.41s)
+=== RUN   TestIntegration_DebtKeysetPagination
+2026/10/26 19:24:14 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_DebtKeysetPagination (0.27s)
+=== RUN   TestIntegration_BankCSVImport
+2026/10/26 19:24:15 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_BankCSVImport (0.31s)
+=== RUN   TestIntegration_BudgetAndReconciliation
+2026/10/26 19:24:15 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_BudgetAndReconciliation (0.31s)
+=== RUN   TestIntegration_AccrualReversalLedger
+2026/10/26 19:24:15 PostgreSQL connection pool initialized successfully
+--- PASS: TestIntegration_AccrualReversalLedger (2.20s)
+PASS
+==================================================================================
+   SİTEYÖNET — DDO KABUL & HIZLI DOĞRULAMA SUITE (AUTOMATED VERIFY)
+   Hedef API: http://siteyonet-audit-api:8080 | Tarih: 2026-10-26 19:24:18
+==================================================================================
+API servisine bağlanılıyor [BAĞLANDI]
+
+==================================================================================
+KİMLİK   | KATEGORİ     | ÖZELLİK / GÖREV ADI                        | SONUÇ  | SÜRE
+---------|--------------|--------------------------------------------|--------|---------
+HEALTH   | Sistem       | Sağlık Ucu ve Veritabanı Bağlantısı        | PASS   |    3 ms
+DDO-HZ   | Standart     | Özel Sağlık Kontrolü (GET /_hz/0c7c)       | PASS   |    2 ms
+DDO-HDR  | Standart     | X-DDO-Build: 0c7cc1 Başlık Doğrulaması     | PASS   |    1 ms
+AUTH-1   | Güvenlik     | Yönetici Girişi (yonetici@siteyonet.com)   | PASS   |  162 ms
+AUTH-2   | Güvenlik     | Malik/Sakin Girişi (malik@siteyonet.com)   | PASS   |  100 ms
+AUTH-3   | Güvenlik     | Denetim Kurulu Girişi (denetim@siteyone... | PASS   |   99 ms
+AUTH-4   | Güvenlik     | Hatalı Parola ile Giriş Engeli (401)       | PASS   |  101 ms
+AUTH-5   | Güvenlik     | Yetkisiz Rol Erişim Engeli (403)           | PASS   |    5 ms
+F-1      | Kapsam       | Site, Blok ve Daire Kayıtları              | PASS   |   74 ms
+F-2      | Kapsam       | Aidat Tanımı ve Tahakkuk Listesi           | PASS   |  721 ms
+F-3      | Kapsam       | Tahsilat ve Borç Takibi                    | PASS   |   52 ms
+F-4      | Kapsam       | Gider Yönetimi ve Fatura Kaydı             | PASS   |   22 ms
+F-5      | Kapsam       | Duyuru, Karar ve Bakım Talepleri           | PASS   |   37 ms
+F-6      | Kapsam       | Muhasebe Defteri ve Dönem Kapanışı         | PASS   | 2862 ms
+F-7      | Kapsam       | Finansal Raporlar ve 'Borcu Yoktur' Doğ... | PASS   |   60 ms
+T-1      | Zorlu Görev  | Tahakkuk ve Paylaştırma Motoru (En Büyü... | PASS   |  633 ms
+T-2      | Zorlu Görev  | Tahsilat, Mahsup (Faiz->Anapara->FIFO) ... | PASS   |    8 ms
+T-3      | Zorlu Görev  | Çok Kiracılı Veri İzolasyonu (PostgreSQ... | PASS   |   15 ms
+T-4      | Zorlu Görev  | Muhasebe Çift Taraflı Kayıt & 'Borcu Yo... | PASS   |   38 ms
+==================================================================================
+🎉 TEBRİKLER! TÜM DOĞRULAMA TESTLERİ EKSİKSİZ BAŞARIYLA GEÇTİ (PASS).

@@ -24,6 +24,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSwitchRole,
 }) => {
   const menuItems = [
+    { id: 'community', label: 'Duyuru, Karar & Bakım (F-5)', icon: BookOpen },
     { id: 'dashboard', label: 'Genel Bakış', icon: TrendingUp },
     { id: 'accrual', label: 'Tahakkuk & Dağıtım (T-1)', icon: Calculator },
     { id: 'payments', label: 'Tahsilat & Dekont Eşleme (T-2)', icon: CreditCard },
@@ -48,7 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Nav Menu */}
       <nav className="nav-menu">
-        {menuItems.map((item) => {
+        {menuItems.filter(item => !['owner','tenant'].includes(currentUser?.role || '') || ['dashboard','units','community','certificates'].includes(item.id)).map((item) => {
           const Icon = item.icon;
           return (
             <button
@@ -110,6 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             👤 Daire Maliki
           </button>
+          <button className="btn btn-secondary" style={{ padding: '6px 8px', fontSize: '0.75rem' }} onClick={() => onSwitchRole('kiraci@siteyonet.com')}>🏠 Kiracı</button>
         </div>
       </div>
     </aside>

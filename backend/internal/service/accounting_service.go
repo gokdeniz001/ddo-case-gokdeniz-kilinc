@@ -92,10 +92,10 @@ func (s *AccountingService) CreateReversalEntry(original domain.JournalEntry, re
 
 // BudgetComparisonItem reports variance between budgeted and actual expenses
 type BudgetComparisonItem struct {
-	Category       string `json:"category"`
-	BudgetCents    int64  `json:"budget_cents"`
-	ActualCents    int64  `json:"actual_cents"`
-	VarianceCents  int64  `json:"variance_cents"`  // Budget - Actual
+	Category        string  `json:"category"`
+	BudgetCents     int64   `json:"budget_cents"`
+	ActualCents     int64   `json:"actual_cents"`
+	VarianceCents   int64   `json:"variance_cents"` // Budget - Actual
 	VariancePercent float64 `json:"variance_percent"`
 }
 

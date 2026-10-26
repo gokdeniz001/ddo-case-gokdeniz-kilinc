@@ -69,6 +69,7 @@ GET {{baseUrl}}/api/v1/units HTTP/1.1
 Authorization: Bearer {{managerToken}}
 
 ### 8. Blokları Listele
+# @name getBlocks
 GET {{baseUrl}}/api/v1/blocks HTTP/1.1
 Authorization: Bearer {{managerToken}}
 
@@ -84,6 +85,7 @@ Authorization: Bearer {{managerToken}}
 @periodId = {{getPeriods.response.body.0.id}}
 
 ### 10. Yeni Tahakkuk Başlat (Kuruşu Kuruşuna Dağıtım - T-1)
+# @name createdAccrual
 POST {{baseUrl}}/api/v1/accruals HTTP/1.1
 Authorization: Bearer {{managerToken}}
 Content-Type: {{contentType}}
@@ -190,6 +192,7 @@ GET {{baseUrl}}/api/v1/journal-entries HTTP/1.1
 Authorization: Bearer {{managerToken}}
 
 ### 20. Hesap Planı ve Mizan
+# @name getLedgerAccounts
 GET {{baseUrl}}/api/v1/ledger-accounts HTTP/1.1
 Authorization: Bearer {{managerToken}}
 
@@ -213,3 +216,235 @@ Content-Type: {{contentType}}
 
 ### 23. Çevrimiçi Belge Doğrulama (Public / Herkese Açık)
 GET {{baseUrl}}/api/v1/certificates/verify/9F2A-B71C HTTP/1.1
+
+### VerifyCertificate (kimlikleri yukarıdaki liste yanıtlarından seçin)
+GET {{baseUrl}}/api/v1/certificates/verify/{{verificationCode}}
+
+### Refresh (kimlikleri yukarıdaki liste yanıtlarından seçin)
+POST {{baseUrl}}/api/v1/auth/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "{{managerLogin.response.body.refresh_token}}"
+}
+
+### GetMe (kimlikleri yukarıdaki liste yanıtlarından seçin)
+GET {{baseUrl}}/api/v1/auth/me
+Authorization: Bearer {{managerToken}}
+
+### SwitchSite (kimlikleri yukarıdaki liste yanıtlarından seçin)
+POST {{baseUrl}}/api/v1/auth/site
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+  "site_id": "{{managerLogin.response.body.site.id}}"
+}
+
+### ListSites (kimlikleri yukarıdaki liste yanıtlarından seçin)
+GET {{baseUrl}}/api/v1/sites
+Authorization: Bearer {{managerToken}}
+
+### GetSite (kimlikleri yukarıdaki liste yanıtlarından seçin)
+GET {{baseUrl}}/api/v1/sites/{{managerLogin.response.body.site.id}}
+Authorization: Bearer {{managerToken}}
+
+### CreateBlock (kimlikleri yukarıdaki liste yanıtlarından seçin)
+# @name createdBlock
+POST {{baseUrl}}/api/v1/blocks
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+  "name": "REST-{{$timestamp}}",
+  "total_floors": 2
+}
+
+### CreateUnit (kimlikleri yukarıdaki liste yanıtlarından seçin)
+# @name createdUnit
+POST {{baseUrl}}/api/v1/units
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+  "block_id": "{{createdBlock.response.body.id}}",
+  "unit_number": "99",
+  "owner_id": "{{managerLogin.response.body.user.id}}",
+  "land_share": 100,
+  "gross_area_m2": 100,
+  "resident_count": 2
+}
+
+### TransferOwnership (kimlikleri yukarıdaki liste yanıtlarından seçin)
+POST {{baseUrl}}/api/v1/units/{{createdUnit.response.body.id}}/transfer
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+  "new_owner_id": "{{residentLogin.response.body.user.id}}",
+  "transfer_date": "2026-10-11"
+}
+
+### ListDuesDefinitions (kimlikleri yukarıdaki liste yanıtlarından seçin)
+GET {{baseUrl}}/api/v1/dues-definitions
+Authorization: Bearer {{managerToken}}
+
+### CreateDuesDefinition (kimlikleri yukarıdaki liste yanıtlarından seçin)
+POST {{baseUrl}}/api/v1/dues-definitions
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+  "name": "REST Aidat",
+  "total_amount_cents": 125433,
+  "distribution_type": "LAND_SHARE",
+  "due_day": 15,
+  "late_fee_rate": 5
+}
+
+### ListAccruals (kimlikleri yukarıdaki liste yanıtlarından seçin)
+GET {{baseUrl}}/api/v1/accruals
+Authorization: Bearer {{managerToken}}
+
+### ReverseAccrual (kimlikleri yukarıdaki liste yanıtlarından seçin)
+POST {{baseUrl}}/api/v1/accruals/{{createdAccrual.response.body.id}}/reverse
+Authorization: Bearer {{managerToken}}
+
+### ListBankStatements (kimlikleri yukarıdaki liste yanıtlarından seçin)
+GET {{baseUrl}}/api/v1/bank-statements
+Authorization: Bearer {{managerToken}}
+
+### ListAnnouncements (kimlikleri yukarıdaki liste yanıtlarından seçin)
+GET {{baseUrl}}/api/v1/announcements
+Authorization: Bearer {{managerToken}}
+
+### CreateAnnouncement (kimlikleri yukarıdaki liste yanıtlarından seçin)
+POST {{baseUrl}}/api/v1/announcements
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+  "title": "REST Duyuru",
+  "content": "Deneme duyurusu",
+  "priority": "NORMAL"
+}
+
+### ListDecisions (kimlikleri yukarıdaki liste yanıtlarından seçin)
+GET {{baseUrl}}/api/v1/decisions
+Authorization: Bearer {{managerToken}}
+
+### CreateDecision (kimlikleri yukarıdaki liste yanıtlarından seçin)
+POST {{baseUrl}}/api/v1/decisions
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+  "decision_number": "REST-{{$timestamp}}",
+  "decision_date": "2026-10-26",
+  "title": "REST Karar",
+  "content": "Deneme kararı",
+  "vote_summary": "Oy birliği"
+}
+
+### ListMaintenanceRequests (kimlikleri yukarıdaki liste yanıtlarından seçin)
+GET {{baseUrl}}/api/v1/maintenance
+Authorization: Bearer {{managerToken}}
+
+### CreateMaintenanceRequest (kimlikleri yukarıdaki liste yanıtlarından seçin)
+# @name createdMaintenance
+POST {{baseUrl}}/api/v1/maintenance
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+  "unit_id": "{{firstUnitId}}",
+  "title": "REST Bakım",
+  "description": "Deneme talebi",
+  "priority": "MEDIUM"
+}
+
+### UpdateMaintenanceStatus (kimlikleri yukarıdaki liste yanıtlarından seçin)
+PUT {{baseUrl}}/api/v1/maintenance/{{createdMaintenance.response.body.id}}/status
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+  "status": "IN_PROGRESS"
+}
+
+### CreateFiscalPeriod (kimlikleri yukarıdaki liste yanıtlarından seçin)
+# @name createdPeriod
+POST {{baseUrl}}/api/v1/periods
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+  "name": "REST Deneme Dönemi",
+  "start_date": "2999-01-01",
+  "end_date": "2999-12-31"
+}
+
+### CloseFiscalPeriod (kimlikleri yukarıdaki liste yanıtlarından seçin)
+POST {{baseUrl}}/api/v1/periods/{{createdPeriod.response.body.id}}/close
+Authorization: Bearer {{managerToken}}
+
+### CreateJournalEntry (kimlikleri yukarıdaki liste yanıtlarından seçin)
+# @name createdJournal
+POST {{baseUrl}}/api/v1/journal-entries
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+  "period_id": "{{periodId}}",
+  "entry_date": "2026-10-26",
+  "description": "REST Fiş",
+  "lines": [
+    {
+      "AccountID": "{{getLedgerAccounts.response.body.0.id}}",
+      "DebitCents": 100
+    },
+    {
+      "AccountID": "{{getLedgerAccounts.response.body.1.id}}",
+      "CreditCents": 100
+    }
+  ]
+}
+
+### ReverseJournalEntry (kimlikleri yukarıdaki liste yanıtlarından seçin)
+POST {{baseUrl}}/api/v1/journal-entries/{{createdJournal.response.body.id}}/reverse
+Authorization: Bearer {{managerToken}}
+
+### GetBudgetComparison (kimlikleri yukarıdaki liste yanıtlarından seçin)
+GET {{baseUrl}}/api/v1/reports/budget-comparison
+Authorization: Bearer {{managerToken}}
+
+### SaveBudget (kimlikleri yukarıdaki liste yanıtlarından seçin)
+POST {{baseUrl}}/api/v1/budgets
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+  "category": "CLEANING",
+  "amount_cents": 2000000
+}
+
+### Reconciliation (kimlikleri yukarıdaki liste yanıtlarından seçin)
+GET {{baseUrl}}/api/v1/reports/reconciliation
+Authorization: Bearer {{managerToken}}
+
+### ListCertificates (kimlikleri yukarıdaki liste yanıtlarından seçin)
+GET {{baseUrl}}/api/v1/certificates
+Authorization: Bearer {{managerToken}}
+
+### ListAuditLogs (kimlikleri yukarıdaki liste yanıtlarından seçin)
+GET {{baseUrl}}/api/v1/audit-logs
+Authorization: Bearer {{managerToken}}
+
+
+### CSV ekstresi içe aktar; aynı anahtar tekrarında satırlar çoğalmamalı
+POST {{baseUrl}}/api/v1/bank-statements/import
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+Idempotency-Key: REST-CSV-001
+
+{"csv":"date,reference,description,amount_cents\n2026-10-26,REST-REF,A BLOK DAIRE: 5 AIDAT,150000\n"}

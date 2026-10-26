@@ -1,0 +1,6 @@
+{"time":"2026-10-26T19:17:10.4080769Z","level":"INFO","msg":"Starting SiteYonet Data Simulator & Seeder..."}
+{"time":"2026-10-26T19:17:10.429637695Z","level":"INFO","msg":"PostgreSQL connection pool initialized successfully"}
+{"time":"2026-10-26T19:17:10.429759827Z","level":"INFO","msg":"Using deterministic random seed: 42"}
+{"time":"2026-10-26T19:17:10.445949426Z","level":"INFO","msg":"FORCE_SEED=true: Truncating existing data for clean re-seed..."}
+{"time":"2026-10-26T19:17:10.908570147Z","level":"INFO","msg":"Generating deterministic seed data (Sites, Units, Users for all roles, Accruals, Payments)..."}
+{"time":"2026-10-26T19:18:28.1068282Z","level":"INFO","msg":"Seed completed: sites=40 units=6000 debts=214560"}

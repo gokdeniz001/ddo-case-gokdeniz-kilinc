@@ -75,3 +75,25 @@ Tekdüzen Hesap Planına uygun Çift Taraflı Muhasebe Defteri (`fy-journal-entr
 
 ### Sonuçlar
 - **Artılar:** Kurumsal muhasebe denetimine hazır mimari; değiştirilemez denetim izi (audit trail); kasa ve banka mutabakatı tam uyumlu.
+
+
+## ADR 4 — İstek boyunca PostgreSQL işlemi ve RLS rolü
+
+Bağlam: İlk sürümde havuz sorguları PostgreSQL süper kullanıcısıyla çalışıyor, RLS dosyaları gerçek API sorgularını korumuyordu.
+Seçenekler: Yalnızca WHERE site_id filtreleri, her sorguya ayrı işlem, istek boyunca tek işlem.
+Karar: Korunan istekte SET LOCAL ROLE siteyonet_runtime; site/kullanıcı/rol ayarları transaction-local. Tüm sorgular aynı işlemden geçer. HTTP yanıtı commit sonrasına kadar tamponlanır.
+Sonuç: RLS, havuza geri dönen bağlantılarda bağlam taşımadan çalışır. İşlem başarısızsa başarı yanıtı gönderilmez. Uzun yanıtlar bellekte tutulur; akış API'si amaçlanmamıştır.
+
+## ADR 5 — Site yazma kilidi ve kalıcı idempotans
+
+Bağlam: Borç okuma ile ödeme yazma arasındaki yarış kayıp güncelleme oluşturabiliyordu; bellek önbelleği yeniden başlatmada kayboluyordu.
+Seçenekler: Satır kilitleri, serializable/retry, site bazlı transaction advisory lock.
+Karar: Bu demo için site bazlı yazma kilidi; iş etkisi ile idempotans yanıtı aynı PostgreSQL işleminde. Anahtar farklı istek gövdesi/yol/kullanıcı ile tekrar kullanılırsa 409.
+Sonuç: Aynı siteye yazmalar sıralanır, farklı siteler bağımsızdır. Yazma throughput'u bilinçli olarak sınırlanır. Sekiz paralel farklı ödeme ve sekiz aynı anahtarlı ödeme gerçek PostgreSQL testleriyle doğrulanır.
+
+## ADR 6 — Kuruş hesabında rasyonel sayılar ve liste sayfalama
+
+Bağlam: Para dağıtımındaki kayan nokta ara hesapları ve sınırsız borç listeleri doğruluk/performans riski oluşturuyordu.
+Seçenekler: float64, sabit ölçekli tamsayılar, math/big.Rat; offset veya imleç sayfalama.
+Karar: Dağıtım ve gecikme tutarları rasyonel aritmetik ile kuruşa yuvarlanır; borç listesi (due_date,id) imleci ve bileşik dizin kullanır.
+Sonuç: En büyük kalan toplamı tam tutar. Varsayılan 500, üst sınır 1.000 kayıt; frontend sayfaları birleştirir. Yük testi sonuçları audit/ altında saklanır.

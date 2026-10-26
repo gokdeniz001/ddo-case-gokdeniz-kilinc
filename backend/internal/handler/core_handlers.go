@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -21,7 +22,7 @@ import (
 
 func (h *Handler) ListSites(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	rows, err := h.db.Pool.Query(ctx, `
+	rows, err := h.db.Executor(ctx).Query(ctx, `
 		SELECT id, name, code, COALESCE(address, ''), city, COALESCE(district, ''), COALESCE(bank_name, ''), COALESCE(bank_iban, ''), default_late_fee_rate, created_at, updated_at
 		FROM "fy-sites"
 		ORDER BY name ASC
@@ -52,7 +53,7 @@ func (h *Handler) GetSite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var s domain.Site
-	err = h.db.Pool.QueryRow(r.Context(), `
+	err = h.db.Executor(r.Context()).QueryRow(r.Context(), `
 		SELECT id, name, code, COALESCE(address, ''), city, COALESCE(district, ''), COALESCE(bank_name, ''), COALESCE(bank_iban, ''), default_late_fee_rate, created_at, updated_at
 		FROM "fy-sites"
 		WHERE id = $1
@@ -68,7 +69,7 @@ func (h *Handler) ListBlocks(w http.ResponseWriter, r *http.Request) {
 	user := appMiddleware.GetCurrentUser(r.Context())
 	siteID := user.SiteID
 
-	rows, err := h.db.Pool.Query(r.Context(), `
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), `
 		SELECT id, site_id, name, total_floors, created_at
 		FROM "fy-blocks"
 		WHERE site_id = $1
@@ -107,7 +108,7 @@ func (h *Handler) CreateBlock(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var blockID uuid.UUID
-	err := h.db.Pool.QueryRow(r.Context(), `
+	err := h.db.Executor(r.Context()).QueryRow(r.Context(), `
 		INSERT INTO "fy-blocks" (site_id, name, total_floors)
 		VALUES ($1, $2, $3)
 		RETURNING id
@@ -138,7 +139,7 @@ func (h *Handler) ListUnits(w http.ResponseWriter, r *http.Request) {
 		WHERE u.site_id = $1
 		ORDER BY b.name ASC, u.unit_number::int ASC
 	`
-	rows, err := h.db.Pool.Query(r.Context(), query, siteID)
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), query, siteID)
 	if err != nil {
 		appMiddleware.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -184,7 +185,7 @@ func (h *Handler) CreateUnit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var unitID uuid.UUID
-	err := h.db.Pool.QueryRow(r.Context(), `
+	err := h.db.Executor(r.Context()).QueryRow(r.Context(), `
 		INSERT INTO "fy-units" (site_id, block_id, unit_number, floor_number, land_share, gross_area_m2, resident_count, is_exempt, owner_id, tenant_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id
@@ -204,7 +205,7 @@ func (h *Handler) CreateUnit(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListDuesDefinitions(w http.ResponseWriter, r *http.Request) {
 	user := appMiddleware.GetCurrentUser(r.Context())
-	rows, err := h.db.Pool.Query(r.Context(), `
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), `
 		SELECT id, site_id, name, total_amount_cents, distribution_type, due_day, late_fee_rate, is_active, created_at
 		FROM "fy-dues-definitions"
 		WHERE site_id = $1
@@ -246,7 +247,7 @@ func (h *Handler) CreateDuesDefinition(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var id uuid.UUID
-	err := h.db.Pool.QueryRow(r.Context(), `
+	err := h.db.Executor(r.Context()).QueryRow(r.Context(), `
 		INSERT INTO "fy-dues-definitions" (site_id, name, total_amount_cents, distribution_type, due_day, late_fee_rate)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id
@@ -262,7 +263,7 @@ func (h *Handler) CreateDuesDefinition(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListAccruals(w http.ResponseWriter, r *http.Request) {
 	user := appMiddleware.GetCurrentUser(r.Context())
-	rows, err := h.db.Pool.Query(r.Context(), `
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), `
 		SELECT id, site_id, dues_definition_id, period_id, title, term_month, distribution_type, total_amount_cents, is_reversed, reversal_accrual_id, created_by, created_at
 		FROM "fy-accruals"
 		WHERE site_id = $1
@@ -310,14 +311,14 @@ func (h *Handler) CreateAccrual(w http.ResponseWriter, r *http.Request) {
 
 	// Check if period is OPEN
 	var periodStatus string
-	err := h.db.Pool.QueryRow(ctx, `SELECT status FROM "fy-fiscal-periods" WHERE id = $1`, req.PeriodID).Scan(&periodStatus)
+	err := h.db.Executor(ctx).QueryRow(ctx, `SELECT status FROM "fy-fiscal-periods" WHERE id = $1`, req.PeriodID).Scan(&periodStatus)
 	if err != nil || periodStatus != domain.PeriodStatusOpen {
 		appMiddleware.RespondError(w, http.StatusBadRequest, "PERIOD_NOT_OPEN", "Tahakkuk yalnızca açık dönemlere yapılabilir")
 		return
 	}
 
 	// Fetch all units in the site
-	rows, err := h.db.Pool.Query(ctx, `
+	rows, err := h.db.Executor(ctx).Query(ctx, `
 		SELECT id, owner_id, land_share, gross_area_m2, resident_count, is_exempt
 		FROM "fy-units"
 		WHERE site_id = $1
@@ -342,6 +343,16 @@ func (h *Handler) CreateAccrual(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	rows.Close()
+	month, err := time.Parse("2006-01", req.TermMonth)
+	if err != nil || req.DueDay < 0 || req.DueDay > 28 {
+		appMiddleware.RespondError(w, 400, "BAD_REQUEST", "Geçersiz dönem veya vade günü (1-28)")
+		return
+	}
+	if err := h.loadTransfers(r, month, unitInputs); err != nil {
+		appMiddleware.RespondError(w, 500, "DB_ERROR", err.Error())
+		return
+	}
 	// Run T-1 Accrual Engine (Largest Remainder Method)
 	allocatedItems, err := h.accrualEngine.DistributeDues(req.TotalAmountCents, req.DistributionType, unitInputs)
 	if err != nil {
@@ -390,13 +401,16 @@ func (h *Handler) CreateAccrual(w http.ResponseWriter, r *http.Request) {
 
 		if acc120 != uuid.Nil && acc600 != uuid.Nil {
 			var jEntryID uuid.UUID
-			entryNum := time.Now().UnixNano() / 1000000
+			entryNum := time.Now().UnixNano()
 			err = tx.QueryRow(ctx, `
 				INSERT INTO "fy-journal-entries" (site_id, period_id, entry_number, entry_date, description, created_by)
 				VALUES ($1, $2, $3, $4, $5, $6)
 				RETURNING id
 			`, user.SiteID, req.PeriodID, entryNum, time.Now(), req.Title+" Aidat Tahakkuk Fişi", user.UserID).Scan(&jEntryID)
 			if err == nil {
+				if _, err = tx.Exec(ctx, `UPDATE "fy-accruals" SET journal_entry_id=$1 WHERE id=$2`, jEntryID, accrualID); err != nil {
+					return err
+				}
 				_, _ = tx.Exec(ctx, `INSERT INTO "fy-journal-lines" (journal_entry_id, account_id, debit_cents, credit_cents, description) VALUES ($1, $2, $3, 0, $4)`, jEntryID, acc120, req.TotalAmountCents, "Dairelerden Aidat Alacakları")
 				_, _ = tx.Exec(ctx, `INSERT INTO "fy-journal-lines" (journal_entry_id, account_id, debit_cents, credit_cents, description) VALUES ($1, $2, 0, $3, $4)`, jEntryID, acc600, req.TotalAmountCents, "Aidat Gelirleri")
 			}
@@ -434,19 +448,26 @@ func (h *Handler) ReverseAccrual(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	var original, period uuid.UUID
+	var reversed, paid bool
+	var status string
+	err = h.db.Executor(ctx).QueryRow(ctx, `SELECT a.journal_entry_id,a.period_id,a.is_reversed,p.status,EXISTS(SELECT FROM "fy-debts" d WHERE d.accrual_id=a.id AND (d.paid_principal_cents>0 OR d.paid_interest_cents>0)) FROM "fy-accruals" a JOIN "fy-fiscal-periods" p ON p.id=a.period_id WHERE a.id=$1 AND a.site_id=$2`, accrualID, user.SiteID).Scan(&original, &period, &reversed, &status, &paid)
+	if err != nil || reversed || paid || status != "OPEN" {
+		appMiddleware.RespondError(w, 409, "ACCRUAL_REVERSAL_UNSUPPORTED", "Yalnızca açık dönemdeki, hiç ödeme almamış ve yevmiye bağlantısı bulunan tahakkuk geri alınabilir")
+		return
+	}
 	err = h.db.WithTenantTx(ctx, func(tx pgx.Tx) error {
-		// Mark accrual as reversed
-		_, err := tx.Exec(ctx, `UPDATE "fy-accruals" SET is_reversed = true WHERE id = $1 AND site_id = $2`, accrualID, user.SiteID)
-		if err != nil {
+		var reversal uuid.UUID
+		if err := tx.QueryRow(ctx, `INSERT INTO "fy-journal-entries" (site_id,period_id,entry_number,entry_date,description,is_reversal,reversed_entry_id,created_by) VALUES ($1,$2,$3,$4,'Tahakkuk ters kaydı',true,$5,$6) RETURNING id`, user.SiteID, period, time.Now().UnixNano(), time.Now(), original, user.UserID).Scan(&reversal); err != nil {
 			return err
 		}
-
-		// Cancel unpaid debts for this accrual
-		_, err = tx.Exec(ctx, `
-			UPDATE "fy-debts" 
-			SET status = 'CANCELLED' 
-			WHERE accrual_id = $1 AND site_id = $2 AND paid_principal_cents = 0
-		`, accrualID, user.SiteID)
+		if _, err := tx.Exec(ctx, `INSERT INTO "fy-journal-lines" (journal_entry_id,account_id,debit_cents,credit_cents,description) SELECT $1,account_id,credit_cents,debit_cents,'Tahakkuk düzeltmesi' FROM "fy-journal-lines" WHERE journal_entry_id=$2`, reversal, original); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE "fy-accruals" SET is_reversed=true WHERE id=$1`, accrualID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `UPDATE "fy-debts" SET status='CANCELLED',updated_at=now() WHERE accrual_id=$1`, accrualID)
 		return err
 	})
 
@@ -496,9 +517,34 @@ func (h *Handler) ListDebts(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	query += " ORDER BY d.due_date ASC"
+	limit := 500
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil || v < 1 || v > 1000 {
+			appMiddleware.RespondError(w, 400, "BAD_REQUEST", "Limit 1-1000 olmalı")
+			return
+		}
+		limit = v
+	}
+	if cursor := r.URL.Query().Get("after"); cursor != "" {
+		parts := strings.Split(cursor, ",")
+		if len(parts) != 2 {
+			appMiddleware.RespondError(w, 400, "BAD_REQUEST", "Geçersiz sayfalama imleci")
+			return
+		}
+		date, err := time.Parse("2006-01-02", parts[0])
+		id, idErr := uuid.Parse(parts[1])
+		if err != nil || idErr != nil {
+			appMiddleware.RespondError(w, 400, "BAD_REQUEST", "Geçersiz sayfalama imleci")
+			return
+		}
+		query += fmt.Sprintf(" AND (d.due_date,d.id) > ($%d::date,$%d::uuid)", len(args)+1, len(args)+2)
+		args = append(args, date, id)
+	}
+	query += fmt.Sprintf(" ORDER BY d.due_date ASC,d.id ASC LIMIT $%d", len(args)+1)
+	args = append(args, limit)
 
-	rows, err := h.db.Pool.Query(r.Context(), query, args...)
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), query, args...)
 	if err != nil {
 		appMiddleware.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -551,10 +597,10 @@ func (h *Handler) ProcessPayment(w http.ResponseWriter, r *http.Request) {
 
 	// Get site default late fee rate
 	lateFeeRate := 5.0
-	_ = h.db.Pool.QueryRow(ctx, `SELECT default_late_fee_rate FROM "fy-sites" WHERE id = $1`, user.SiteID).Scan(&lateFeeRate)
+	_ = h.db.Executor(ctx).QueryRow(ctx, `SELECT default_late_fee_rate FROM "fy-sites" WHERE id = $1`, user.SiteID).Scan(&lateFeeRate)
 
 	// Fetch active debts for this unit
-	rows, err := h.db.Pool.Query(ctx, `
+	rows, err := h.db.Executor(ctx).Query(ctx, `
 		SELECT id, site_id, unit_id, user_id, principal_cents, paid_principal_cents, paid_interest_cents, due_date, status
 		FROM "fy-debts"
 		WHERE site_id = $1 AND unit_id = $2 AND status IN ('UNPAID', 'PARTIAL')
@@ -578,7 +624,7 @@ func (h *Handler) ProcessPayment(w http.ResponseWriter, r *http.Request) {
 
 	if debtUserID == uuid.Nil {
 		// Fallback to unit owner
-		_ = h.db.Pool.QueryRow(ctx, `SELECT COALESCE(owner_id, tenant_id) FROM "fy-units" WHERE id = $1`, req.UnitID).Scan(&debtUserID)
+		_ = h.db.Executor(ctx).QueryRow(ctx, `SELECT COALESCE(owner_id, tenant_id) FROM "fy-units" WHERE id = $1`, req.UnitID).Scan(&debtUserID)
 	}
 
 	// Run T-2 Waterfall Allocation
@@ -593,7 +639,7 @@ func (h *Handler) ProcessPayment(w http.ResponseWriter, r *http.Request) {
 		// Insert Payment
 		err := tx.QueryRow(ctx, `
 			INSERT INTO "fy-payments" (site_id, unit_id, user_id, payment_date, amount_cents, unallocated_cents, payment_channel, bank_reference, description, idempotency_key, created_by)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10,''), $11)
 			RETURNING id
 		`, user.SiteID, req.UnitID, debtUserID, payDate, req.AmountCents, allocResult.UnallocatedCents, req.PaymentChannel, req.BankReference, req.Description, req.IdempotencyKey, user.UserID).Scan(&paymentID)
 		if err != nil {
@@ -623,26 +669,36 @@ func (h *Handler) ProcessPayment(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Double-entry accounting: 102 Banka (Debit) vs 120 Alıcılar (Credit)
-		var acc102, acc120 uuid.UUID
-		_ = tx.QueryRow(ctx, `SELECT id FROM "fy-ledger-accounts" WHERE site_id = $1 AND code = '102'`, user.SiteID).Scan(&acc102)
-		_ = tx.QueryRow(ctx, `SELECT id FROM "fy-ledger-accounts" WHERE site_id = $1 AND code = '120'`, user.SiteID).Scan(&acc120)
-
-		if acc102 != uuid.Nil && acc120 != uuid.Nil {
-			var periodID uuid.UUID
-			_ = tx.QueryRow(ctx, `SELECT id FROM "fy-fiscal-periods" WHERE site_id = $1 AND status = 'OPEN' LIMIT 1`, user.SiteID).Scan(&periodID)
-			if periodID != uuid.Nil {
-				entryNum := time.Now().UnixNano() / 1000000
-				var jEntryID uuid.UUID
-				err = tx.QueryRow(ctx, `
-					INSERT INTO "fy-journal-entries" (site_id, period_id, entry_number, entry_date, description, created_by)
-					VALUES ($1, $2, $3, $4, $5, $6)
-					RETURNING id
-				`, user.SiteID, periodID, entryNum, payDate, "Tahsilat Fişi - Ref: "+req.BankReference, user.UserID).Scan(&jEntryID)
-				if err == nil {
-					_, _ = tx.Exec(ctx, `INSERT INTO "fy-journal-lines" (journal_entry_id, account_id, debit_cents, credit_cents, description) VALUES ($1, $2, $3, 0, $4)`, jEntryID, acc102, req.AmountCents, "Banka Tahsilatı")
-					_, _ = tx.Exec(ctx, `INSERT INTO "fy-journal-lines" (journal_entry_id, account_id, debit_cents, credit_cents, description) VALUES ($1, $2, 0, $3, $4)`, jEntryID, acc120, req.AmountCents, "Daire Borç Kapama")
-				}
+		var periodID uuid.UUID
+		if err := tx.QueryRow(ctx, `SELECT id FROM "fy-fiscal-periods" WHERE site_id=$1 AND status='OPEN' AND $2::date BETWEEN start_date AND end_date ORDER BY start_date DESC LIMIT 1`, user.SiteID, payDate).Scan(&periodID); err != nil {
+			return fmt.Errorf("payment requires an open fiscal period: %w", err)
+		}
+		var entryID uuid.UUID
+		if err := tx.QueryRow(ctx, `INSERT INTO "fy-journal-entries" (site_id,period_id,entry_number,entry_date,description,created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`, user.SiteID, periodID, time.Now().UnixNano(), payDate, "Tahsilat: "+req.BankReference, user.UserID).Scan(&entryID); err != nil {
+			return err
+		}
+		var principal, interest int64
+		for _, item := range allocResult.AllocatedDebts {
+			principal += item.PrincipalPaid
+			interest += item.InterestPaid
+		}
+		bankCode := "102"
+		if req.PaymentChannel == "CASH" {
+			bankCode = "100"
+		}
+		for _, line := range []struct {
+			code          string
+			debit, credit int64
+		}{{bankCode, req.AmountCents, 0}, {"120", 0, principal}, {"642", 0, interest}, {"340", 0, allocResult.UnallocatedCents}} {
+			if line.debit == 0 && line.credit == 0 {
+				continue
+			}
+			var account uuid.UUID
+			if err := tx.QueryRow(ctx, `SELECT id FROM "fy-ledger-accounts" WHERE site_id=$1 AND code=$2`, user.SiteID, line.code).Scan(&account); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO "fy-journal-lines" (journal_entry_id,account_id,debit_cents,credit_cents,description) VALUES ($1,$2,$3,$4,'Tahsilat mahsup')`, entryID, account, line.debit, line.credit); err != nil {
+				return err
 			}
 		}
 
@@ -675,7 +731,7 @@ func (h *Handler) FuzzyMatchBankStatement(w http.ResponseWriter, r *http.Request
 	}
 
 	// Fetch all units of this site
-	rows, err := h.db.Pool.Query(r.Context(), `
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), `
 		SELECT u.id, u.site_id, u.block_id, b.name, u.unit_number, u.floor_number, COALESCE(o.full_name, '')
 		FROM "fy-units" u
 		JOIN "fy-blocks" b ON u.block_id = b.id
@@ -707,9 +763,9 @@ func (h *Handler) FuzzyMatchBankStatement(w http.ResponseWriter, r *http.Request
 
 func (h *Handler) ListBankStatements(w http.ResponseWriter, r *http.Request) {
 	user := appMiddleware.GetCurrentUser(r.Context())
-	rows, err := h.db.Pool.Query(r.Context(), `
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), `
 		SELECT s.id, s.site_id, s.statement_date, COALESCE(s.reference_number, ''), s.raw_description, s.amount_cents,
-		       s.matched_unit_id, COALESCE(u.unit_number, '') AS matched_unit_no, s.match_confidence, s.match_status, s.payment_id, s.created_at
+		       s.matched_unit_id, COALESCE(u.unit_number, '') AS matched_unit_no, COALESCE(s.match_confidence,0), s.match_status, s.payment_id, s.created_at
 		FROM "fy-bank-statements" s
 		LEFT JOIN "fy-units" u ON s.matched_unit_id = u.id
 		WHERE s.site_id = $1
@@ -752,8 +808,8 @@ func (h *Handler) RestructureDebts(w http.ResponseWriter, r *http.Request) {
 	// Sum overdue debts
 	var totalOverdueCents int64
 	var debtUserID uuid.UUID
-	err := h.db.Pool.QueryRow(ctx, `
-		SELECT COALESCE(SUM(principal_cents - paid_principal_cents), 0), MAX(user_id)
+	err := h.db.Executor(ctx).QueryRow(ctx, `
+		SELECT COALESCE(SUM(principal_cents - paid_principal_cents), 0), (array_agg(user_id))[1]
 		FROM "fy-debts"
 		WHERE site_id = $1 AND unit_id = $2 AND status IN ('UNPAID', 'PARTIAL')
 	`, user.SiteID, req.UnitID).Scan(&totalOverdueCents, &debtUserID)
@@ -825,7 +881,7 @@ func (h *Handler) RestructureDebts(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListExpenses(w http.ResponseWriter, r *http.Request) {
 	user := appMiddleware.GetCurrentUser(r.Context())
-	rows, err := h.db.Pool.Query(r.Context(), `
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), `
 		SELECT id, site_id, period_id, category, title, vendor_name, COALESCE(invoice_number, ''), invoice_date, due_date, amount_cents, paid_cents, status, COALESCE(document_url, ''), created_by, created_at
 		FROM "fy-expenses"
 		WHERE site_id = $1
@@ -873,6 +929,14 @@ func (h *Handler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 		invDate = time.Now()
 	}
 
+	if req.PeriodID == nil {
+		var periodID uuid.UUID
+		if err := h.db.Executor(r.Context()).QueryRow(r.Context(), `SELECT id FROM "fy-fiscal-periods" WHERE site_id=$1 AND status='OPEN' AND $2::date BETWEEN start_date AND end_date ORDER BY start_date DESC LIMIT 1`, user.SiteID, invDate).Scan(&periodID); err != nil {
+			appMiddleware.RespondError(w, 400, "PERIOD_NOT_OPEN", "Fatura tarihi için açık dönem bulunamadı")
+			return
+		}
+		req.PeriodID = &periodID
+	}
 	var expID uuid.UUID
 	err = h.db.WithTenantTx(r.Context(), func(tx pgx.Tx) error {
 		err := tx.QueryRow(r.Context(), `
@@ -887,10 +951,10 @@ func (h *Handler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 		// Double-entry: 770 Genel Yönetim Giderleri (Debit) vs 102/320 Borçlar (Credit)
 		var acc770, acc102 uuid.UUID
 		_ = tx.QueryRow(r.Context(), `SELECT id FROM "fy-ledger-accounts" WHERE site_id = $1 AND code = '770'`, user.SiteID).Scan(&acc770)
-		_ = tx.QueryRow(r.Context(), `SELECT id FROM "fy-ledger-accounts" WHERE site_id = $1 AND code = '102'`, user.SiteID).Scan(&acc102)
+		_ = tx.QueryRow(r.Context(), `SELECT id FROM "fy-ledger-accounts" WHERE site_id = $1 AND code = '320'`, user.SiteID).Scan(&acc102)
 
 		if acc770 != uuid.Nil && acc102 != uuid.Nil && req.PeriodID != nil {
-			entryNum := time.Now().UnixNano() / 1000000
+			entryNum := time.Now().UnixNano()
 			var jEntryID uuid.UUID
 			err = tx.QueryRow(r.Context(), `
 				INSERT INTO "fy-journal-entries" (site_id, period_id, entry_number, entry_date, description, created_by)
@@ -899,7 +963,7 @@ func (h *Handler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 			`, user.SiteID, *req.PeriodID, entryNum, invDate, "Gider Fişi: "+req.Title, user.UserID).Scan(&jEntryID)
 			if err == nil {
 				_, _ = tx.Exec(r.Context(), `INSERT INTO "fy-journal-lines" (journal_entry_id, account_id, debit_cents, credit_cents, description) VALUES ($1, $2, $3, 0, $4)`, jEntryID, acc770, req.AmountCents, req.Title)
-				_, _ = tx.Exec(r.Context(), `INSERT INTO "fy-journal-lines" (journal_entry_id, account_id, debit_cents, credit_cents, description) VALUES ($1, $2, 0, $3, $4)`, jEntryID, acc102, req.AmountCents, "Banka Ödemesi")
+				_, _ = tx.Exec(r.Context(), `INSERT INTO "fy-journal-lines" (journal_entry_id, account_id, debit_cents, credit_cents, description) VALUES ($1, $2, 0, $3, $4)`, jEntryID, acc102, req.AmountCents, "Tedarikçi Borcu")
 			}
 		}
 
@@ -921,7 +985,7 @@ func (h *Handler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListAnnouncements(w http.ResponseWriter, r *http.Request) {
 	user := appMiddleware.GetCurrentUser(r.Context())
-	rows, err := h.db.Pool.Query(r.Context(), `
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), `
 		SELECT id, site_id, title, content, priority, is_published, created_by, created_at
 		FROM "fy-announcements"
 		WHERE site_id = $1 AND is_published = true
@@ -964,7 +1028,7 @@ func (h *Handler) CreateAnnouncement(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var id uuid.UUID
-	err := h.db.Pool.QueryRow(r.Context(), `
+	err := h.db.Executor(r.Context()).QueryRow(r.Context(), `
 		INSERT INTO "fy-announcements" (site_id, title, content, priority, created_by)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id
@@ -980,7 +1044,7 @@ func (h *Handler) CreateAnnouncement(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListDecisions(w http.ResponseWriter, r *http.Request) {
 	user := appMiddleware.GetCurrentUser(r.Context())
-	rows, err := h.db.Pool.Query(r.Context(), `
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), `
 		SELECT id, site_id, decision_number, decision_date, title, content, COALESCE(vote_summary, ''), created_by, created_at
 		FROM "fy-decisions"
 		WHERE site_id = $1
@@ -1027,7 +1091,7 @@ func (h *Handler) CreateDecision(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var id uuid.UUID
-	err = h.db.Pool.QueryRow(r.Context(), `
+	err = h.db.Executor(r.Context()).QueryRow(r.Context(), `
 		INSERT INTO "fy-decisions" (site_id, decision_number, decision_date, title, content, vote_summary, created_by)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id
@@ -1059,7 +1123,7 @@ func (h *Handler) ListMaintenanceRequests(w http.ResponseWriter, r *http.Request
 	}
 	query += " ORDER BY m.created_at DESC"
 
-	rows, err := h.db.Pool.Query(r.Context(), query, args...)
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), query, args...)
 	if err != nil {
 		appMiddleware.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -1097,7 +1161,7 @@ func (h *Handler) CreateMaintenanceRequest(w http.ResponseWriter, r *http.Reques
 	}
 
 	var id uuid.UUID
-	err := h.db.Pool.QueryRow(r.Context(), `
+	err := h.db.Executor(r.Context()).QueryRow(r.Context(), `
 		INSERT INTO "fy-maintenance-requests" (site_id, unit_id, user_id, title, description, category, priority)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id
@@ -1140,7 +1204,7 @@ func (h *Handler) UpdateMaintenanceStatus(w http.ResponseWriter, r *http.Request
 		resolvedAt = &now
 	}
 
-	_, err = h.db.Pool.Exec(r.Context(), `
+	_, err = h.db.Executor(r.Context()).Exec(r.Context(), `
 		UPDATE "fy-maintenance-requests"
 		SET status = $1, resolution_notes = $2, resolved_at = $3, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $4 AND site_id = $5
@@ -1160,7 +1224,7 @@ func (h *Handler) UpdateMaintenanceStatus(w http.ResponseWriter, r *http.Request
 
 func (h *Handler) ListFiscalPeriods(w http.ResponseWriter, r *http.Request) {
 	user := appMiddleware.GetCurrentUser(r.Context())
-	rows, err := h.db.Pool.Query(r.Context(), `
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), `
 		SELECT id, site_id, name, start_date, end_date, status, closed_at, closed_by, created_at
 		FROM "fy-fiscal-periods"
 		WHERE site_id = $1
@@ -1203,7 +1267,7 @@ func (h *Handler) CreateFiscalPeriod(w http.ResponseWriter, r *http.Request) {
 	eDate, _ := time.Parse("2006-01-02", req.EndDate)
 
 	var id uuid.UUID
-	err := h.db.Pool.QueryRow(r.Context(), `
+	err := h.db.Executor(r.Context()).QueryRow(r.Context(), `
 		INSERT INTO "fy-fiscal-periods" (site_id, name, start_date, end_date, status)
 		VALUES ($1, $2, $3, $4, 'OPEN')
 		RETURNING id
@@ -1233,7 +1297,7 @@ func (h *Handler) CloseFiscalPeriod(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now()
-	res, err := h.db.Pool.Exec(r.Context(), `
+	res, err := h.db.Executor(r.Context()).Exec(r.Context(), `
 		UPDATE "fy-fiscal-periods"
 		SET status = 'CLOSED', closed_at = $1, closed_by = $2
 		WHERE id = $3 AND site_id = $4 AND status = 'OPEN'
@@ -1254,7 +1318,7 @@ func (h *Handler) CloseFiscalPeriod(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListLedgerAccounts(w http.ResponseWriter, r *http.Request) {
 	user := appMiddleware.GetCurrentUser(r.Context())
-	rows, err := h.db.Pool.Query(r.Context(), `
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), `
 		SELECT a.id, a.site_id, a.code, a.name, a.account_type, a.is_active, a.created_at,
 		       COALESCE(SUM(l.debit_cents) - SUM(l.credit_cents), 0) AS balance_cents
 		FROM "fy-ledger-accounts" a
@@ -1281,7 +1345,7 @@ func (h *Handler) ListLedgerAccounts(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListJournalEntries(w http.ResponseWriter, r *http.Request) {
 	user := appMiddleware.GetCurrentUser(r.Context())
-	rows, err := h.db.Pool.Query(r.Context(), `
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), `
 		SELECT e.id, e.site_id, e.period_id, e.entry_number, e.entry_date, e.description, e.is_reversal, e.reversed_entry_id, e.created_at
 		FROM "fy-journal-entries" e
 		WHERE e.site_id = $1
@@ -1298,26 +1362,30 @@ func (h *Handler) ListJournalEntries(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var e domain.JournalEntry
 		if err := rows.Scan(&e.ID, &e.SiteID, &e.PeriodID, &e.EntryNumber, &e.EntryDate, &e.Description, &e.IsReversal, &e.ReversedEntryID, &e.CreatedAt); err == nil {
-			// Fetch lines for each entry
-			lRows, err := h.db.Pool.Query(r.Context(), `
+			entries = append(entries, e)
+		}
+	}
+	rows.Close()
+	for i := range entries {
+		e := &entries[i]
+		// Fetch lines for each entry
+		lRows, err := h.db.Executor(r.Context()).Query(r.Context(), `
 				SELECT l.id, l.journal_entry_id, l.account_id, a.code, a.name, l.debit_cents, l.credit_cents, l.description
 				FROM "fy-journal-lines" l
 				JOIN "fy-ledger-accounts" a ON l.account_id = a.id
 				WHERE l.journal_entry_id = $1
 			`, e.ID)
-			if err == nil {
-				e.Lines = make([]domain.JournalLine, 0)
-				for lRows.Next() {
-					var l domain.JournalLine
-					if err := lRows.Scan(&l.ID, &l.JournalEntryID, &l.AccountID, &l.AccountCode, &l.AccountName, &l.DebitCents, &l.CreditCents, &l.Description); err == nil {
-						e.Lines = append(e.Lines, l)
-						e.TotalDebitCents += l.DebitCents
-						e.TotalCreditCents += l.CreditCents
-					}
+		if err == nil {
+			e.Lines = make([]domain.JournalLine, 0)
+			for lRows.Next() {
+				var l domain.JournalLine
+				if err := lRows.Scan(&l.ID, &l.JournalEntryID, &l.AccountID, &l.AccountCode, &l.AccountName, &l.DebitCents, &l.CreditCents, &l.Description); err == nil {
+					e.Lines = append(e.Lines, l)
+					e.TotalDebitCents += l.DebitCents
+					e.TotalCreditCents += l.CreditCents
 				}
-				lRows.Close()
 			}
-			entries = append(entries, e)
+			lRows.Close()
 		}
 	}
 	respondJSON(w, http.StatusOK, entries)
@@ -1332,9 +1400,9 @@ func (h *Handler) CreateJournalEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		PeriodID    uuid.UUID                   `json:"period_id"`
-		EntryDate   string                      `json:"entry_date"`
-		Description string                      `json:"description"`
+		PeriodID    uuid.UUID                  `json:"period_id"`
+		EntryDate   string                     `json:"entry_date"`
+		Description string                     `json:"description"`
 		Lines       []service.JournalLineInput `json:"lines"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1350,7 +1418,7 @@ func (h *Handler) CreateJournalEntry(w http.ResponseWriter, r *http.Request) {
 
 	// Check if period is OPEN
 	var periodStatus string
-	_ = h.db.Pool.QueryRow(r.Context(), `SELECT status FROM "fy-fiscal-periods" WHERE id = $1`, req.PeriodID).Scan(&periodStatus)
+	_ = h.db.Executor(r.Context()).QueryRow(r.Context(), `SELECT status FROM "fy-fiscal-periods" WHERE id = $1`, req.PeriodID).Scan(&periodStatus)
 	if periodStatus != domain.PeriodStatusOpen {
 		appMiddleware.RespondError(w, http.StatusBadRequest, "LOCKED_PERIOD", "Kapalı veya kilitli bir döneme kayıt yapılamaz! Düzeltmeler ters kayıtla yapılmalıdır.")
 		return
@@ -1362,7 +1430,7 @@ func (h *Handler) CreateJournalEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var entryID uuid.UUID
-	entryNum := time.Now().UnixNano() / 1000000
+	entryNum := time.Now().UnixNano()
 
 	err = h.db.WithTenantTx(r.Context(), func(tx pgx.Tx) error {
 		err := tx.QueryRow(r.Context(), `
@@ -1415,7 +1483,7 @@ func (h *Handler) ReverseJournalEntry(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch original entry and lines
 	var orig domain.JournalEntry
-	err = h.db.Pool.QueryRow(r.Context(), `
+	err = h.db.Executor(r.Context()).QueryRow(r.Context(), `
 		SELECT id, site_id, period_id, entry_number, entry_date, description, is_reversal
 		FROM "fy-journal-entries"
 		WHERE id = $1 AND site_id = $2
@@ -1425,7 +1493,7 @@ func (h *Handler) ReverseJournalEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := h.db.Pool.Query(r.Context(), `
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), `
 		SELECT account_id, debit_cents, credit_cents, description
 		FROM "fy-journal-lines"
 		WHERE journal_entry_id = $1
@@ -1449,8 +1517,12 @@ func (h *Handler) ReverseJournalEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := h.db.Executor(r.Context()).QueryRow(r.Context(), `SELECT id FROM "fy-fiscal-periods" WHERE site_id=$1 AND status='OPEN' ORDER BY start_date DESC LIMIT 1`, user.SiteID).Scan(&reversalInput.PeriodID); err != nil {
+		appMiddleware.RespondError(w, 400, "PERIOD_NOT_OPEN", "Ters kayıt için açık dönem gerekli")
+		return
+	}
 	var revEntryID uuid.UUID
-	entryNum := time.Now().UnixNano() / 1000000
+	entryNum := time.Now().UnixNano()
 
 	err = h.db.WithTenantTx(r.Context(), func(tx pgx.Tx) error {
 		err := tx.QueryRow(r.Context(), `
@@ -1498,19 +1570,21 @@ func (h *Handler) GetFinancialSummary(w http.ResponseWriter, r *http.Request) {
 	var totalAccrualsCents int64
 	var totalCollectedCents int64
 	var totalExpensesCents int64
+	var totalPaidExpensesCents int64
 	var totalOutstandingDebtCents int64
 
-	_ = h.db.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(total_amount_cents), 0) FROM "fy-accruals" WHERE site_id = $1 AND is_reversed = false`, user.SiteID).Scan(&totalAccrualsCents)
-	_ = h.db.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(amount_cents), 0) FROM "fy-payments" WHERE site_id = $1`, user.SiteID).Scan(&totalCollectedCents)
-	_ = h.db.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(amount_cents), 0) FROM "fy-expenses" WHERE site_id = $1 AND status != 'CANCELLED'`, user.SiteID).Scan(&totalExpensesCents)
-	_ = h.db.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(principal_cents - paid_principal_cents), 0) FROM "fy-debts" WHERE site_id = $1 AND status IN ('UNPAID', 'PARTIAL')`, user.SiteID).Scan(&totalOutstandingDebtCents)
+	_ = h.db.Executor(ctx).QueryRow(ctx, `SELECT COALESCE(SUM(total_amount_cents), 0) FROM "fy-accruals" WHERE site_id = $1 AND is_reversed = false`, user.SiteID).Scan(&totalAccrualsCents)
+	_ = h.db.Executor(ctx).QueryRow(ctx, `SELECT COALESCE(SUM(amount_cents), 0) FROM "fy-payments" WHERE site_id = $1`, user.SiteID).Scan(&totalCollectedCents)
+	_ = h.db.Executor(ctx).QueryRow(ctx, `SELECT COALESCE(SUM(amount_cents), 0) FROM "fy-expenses" WHERE site_id = $1 AND status != 'CANCELLED'`, user.SiteID).Scan(&totalExpensesCents)
+	_ = h.db.Executor(ctx).QueryRow(ctx, `SELECT COALESCE(SUM(principal_cents - paid_principal_cents), 0) FROM "fy-debts" WHERE site_id = $1 AND status IN ('UNPAID', 'PARTIAL')`, user.SiteID).Scan(&totalOutstandingDebtCents)
 
+	_ = h.db.Executor(ctx).QueryRow(ctx, `SELECT COALESCE(SUM(paid_cents),0) FROM "fy-expenses" WHERE site_id=$1 AND status != 'CANCELLED'`, user.SiteID).Scan(&totalPaidExpensesCents)
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"total_accruals_cents":         totalAccrualsCents,
 		"total_collected_cents":        totalCollectedCents,
 		"total_expenses_cents":         totalExpensesCents,
 		"total_outstanding_debt_cents": totalOutstandingDebtCents,
-		"net_cash_flow_cents":          totalCollectedCents - totalExpensesCents,
+		"net_cash_flow_cents":          totalCollectedCents - totalPaidExpensesCents,
 		"collection_rate_percent":      calculateRate(totalCollectedCents, totalAccrualsCents),
 	})
 }
@@ -1525,7 +1599,7 @@ func calculateRate(col, acc int64) float64 {
 func (h *Handler) GetBudgetComparison(w http.ResponseWriter, r *http.Request) {
 	user := appMiddleware.GetCurrentUser(r.Context())
 	// Fetch categorized expenses
-	rows, err := h.db.Pool.Query(r.Context(), `
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), `
 		SELECT category, COALESCE(SUM(amount_cents), 0)
 		FROM "fy-expenses"
 		WHERE site_id = $1 AND status != 'CANCELLED'
@@ -1546,15 +1620,22 @@ func (h *Handler) GetBudgetComparison(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Standard budget targets for demonstration comparison
-	budgets := map[string]int64{
-		"ELEC":      1500000, // 15,000 TL
-		"WATER":     800000,  // 8,000 TL
-		"ELEVATOR":  1200000, // 12,000 TL
-		"CLEANING":  2000000, // 20,000 TL
-		"SECURITY":  3500000, // 35,000 TL
-		"REPAIR":    1000000, // 10,000 TL
-		"MGMT":      800000,  // 8,000 TL
+	rows.Close()
+	budgets := make(map[string]int64)
+	budgetRows, err := h.db.Executor(r.Context()).Query(r.Context(), `SELECT category,amount_cents FROM "fy-budgets" WHERE site_id=$1`, user.SiteID)
+	if err != nil {
+		appMiddleware.RespondError(w, 500, "DB_ERROR", err.Error())
+		return
+	}
+	defer budgetRows.Close()
+	for budgetRows.Next() {
+		var category string
+		var amount int64
+		if err := budgetRows.Scan(&category, &amount); err != nil {
+			appMiddleware.RespondError(w, 500, "DB_ERROR", err.Error())
+			return
+		}
+		budgets[category] = amount
 	}
 
 	comp := h.accountingService.CalculateBudgetComparison(budgets, actuals)
@@ -1581,7 +1662,7 @@ func (h *Handler) ListCertificates(w http.ResponseWriter, r *http.Request) {
 	}
 	query += " ORDER BY c.created_at DESC"
 
-	rows, err := h.db.Pool.Query(r.Context(), query, args...)
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), query, args...)
 	if err != nil {
 		appMiddleware.RespondError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -1628,10 +1709,10 @@ func (h *Handler) IssueClearanceCertificate(w http.ResponseWriter, r *http.Reque
 	var unit domain.Unit
 	var resident domain.User
 
-	_ = h.db.Pool.QueryRow(ctx, `SELECT id, name, code FROM "fy-sites" WHERE id = $1`, user.SiteID).Scan(&site.ID, &site.Name, &site.Code)
+	_ = h.db.Executor(ctx).QueryRow(ctx, `SELECT id, name, code FROM "fy-sites" WHERE id = $1`, user.SiteID).Scan(&site.ID, &site.Name, &site.Code)
 
 	var ownerID *uuid.UUID
-	err := h.db.Pool.QueryRow(ctx, `
+	err := h.db.Executor(ctx).QueryRow(ctx, `
 		SELECT u.id, u.site_id, u.block_id, b.name, u.unit_number, u.owner_id
 		FROM "fy-units" u
 		JOIN "fy-blocks" b ON u.block_id = b.id
@@ -1643,7 +1724,7 @@ func (h *Handler) IssueClearanceCertificate(w http.ResponseWriter, r *http.Reque
 	}
 
 	if ownerID != nil {
-		_ = h.db.Pool.QueryRow(ctx, `SELECT id, full_name, email FROM "fy-ox-users" WHERE id = $1`, *ownerID).Scan(&resident.ID, &resident.FullName, &resident.Email)
+		_ = h.db.Executor(ctx).QueryRow(ctx, `SELECT id, full_name, email FROM "fy-ox-users" WHERE id = $1`, *ownerID).Scan(&resident.ID, &resident.FullName, &resident.Email)
 	} else {
 		resident.ID = user.UserID
 		resident.FullName = "Daire Sakini"
@@ -1651,7 +1732,7 @@ func (h *Handler) IssueClearanceCertificate(w http.ResponseWriter, r *http.Reque
 
 	// Verify un-cleared debts
 	var outstandingDebtCents int64
-	_ = h.db.Pool.QueryRow(ctx, `
+	_ = h.db.Executor(ctx).QueryRow(ctx, `
 		SELECT COALESCE(SUM(principal_cents - paid_principal_cents), 0)
 		FROM "fy-debts"
 		WHERE site_id = $1 AND unit_id = $2 AND status IN ('UNPAID', 'PARTIAL')
@@ -1668,7 +1749,7 @@ func (h *Handler) IssueClearanceCertificate(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	_, err = h.db.Pool.Exec(ctx, `
+	_, err = h.db.Executor(ctx).Exec(ctx, `
 		INSERT INTO "fy-clearance-certificates" (id, site_id, unit_id, user_id, certificate_number, verification_code, sha256_hash, issued_date, valid_until, debt_balance_at_issue_cents, issued_by)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`, cert.ID, cert.SiteID, cert.UnitID, cert.UserID, cert.CertificateNumber, cert.VerificationCode, cert.Sha256Hash, cert.IssuedDate, cert.ValidUntil, cert.DebtBalanceAtIssueCents, cert.IssuedBy)
@@ -1689,7 +1770,7 @@ func (h *Handler) VerifyCertificate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var c domain.ClearanceCertificate
-	err := h.db.Pool.QueryRow(r.Context(), `
+	err := h.db.Executor(r.Context()).QueryRow(r.Context(), `
 		SELECT c.id, c.site_id, c.unit_id, u.unit_number, b.name AS block_name,
 		       c.user_id, usr.full_name AS user_name,
 		       c.certificate_number, c.verification_code, c.sha256_hash,
@@ -1732,7 +1813,7 @@ func (h *Handler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := h.db.Pool.Query(r.Context(), `
+	rows, err := h.db.Executor(r.Context()).Query(r.Context(), `
 		SELECT id, site_id, user_id, action, entity_table, entity_id, old_values, new_values, ip_address, user_agent, created_at
 		FROM "fy-audit-logs"
 		WHERE site_id = $1

@@ -46,7 +46,13 @@ func NewDB(databaseURL string) (*DB, error) {
 func (d *DB) WithTenantTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
 	user := middleware.GetCurrentUser(ctx)
 
-	tx, err := d.Pool.Begin(ctx)
+	var tx pgx.Tx
+	var err error
+	if parent, ok := ctx.Value(middleware.TransactionKey).(pgx.Tx); ok {
+		tx, err = parent.Begin(ctx)
+	} else {
+		tx, err = d.Pool.Begin(ctx)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to begin tx: %w", err)
 	}
@@ -83,25 +89,19 @@ func (d *DB) WithTenantTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
 // LogAudit logs an event to "fy-audit-logs" table
 func (d *DB) LogAudit(ctx context.Context, action, entityTable string, entityID string, oldVals, newVals interface{}) {
 	user := middleware.GetCurrentUser(ctx)
-	go func() {
-		bgCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
 
-		var siteID *string
-		var userID *string
-		if user != nil {
-			s := user.SiteID.String()
-			u := user.UserID.String()
-			siteID = &s
-			userID = &u
-		}
+	var siteID, userID *string
+	if user != nil {
+		s, u := user.SiteID.String(), user.UserID.String()
+		siteID, userID = &s, &u
+	}
+	_, err := d.Executor(ctx).Exec(ctx, `INSERT INTO "fy-audit-logs"
+		(site_id,user_id,action,entity_table,entity_id,old_values,new_values)
+		VALUES ($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7)`, siteID, userID, action, entityTable, entityID, oldVals, newVals)
+	if err != nil {
+		log.Printf("audit insert failed: %v", err)
+	}
 
-		query := `
-			INSERT INTO "fy-audit-logs" (site_id, user_id, action, entity_table, entity_id, old_values, new_values)
-			VALUES ($1::uuid, $2::uuid, $3, $4, $5::uuid, $6, $7)
-		`
-		_, _ = d.Pool.Exec(bgCtx, query, siteID, userID, action, entityTable, entityID, oldVals, newVals)
-	}()
 }
 
 // CheckHealth verifies DB connectivity

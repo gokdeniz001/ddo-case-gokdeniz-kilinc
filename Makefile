@@ -28,21 +28,14 @@ verify:
 # Zorunlu Sıfırlama Komutu (Bölüm 10)
 reset-demo:
 	docker compose down -v
-	docker compose up -d db
-	@echo "Veritabanının hazır olması bekleniyor..."
-	sleep 4
-	docker compose up -d backend
-	@echo "Backend ve migrasyonların tamamlanması bekleniyor..."
-	sleep 5
-	docker compose run --rm simulator
-	docker compose up -d frontend
-	@echo "✅ Demo verileri ilk seed haline başarıyla döndürüldü!"
+	docker compose up -d --build --wait --wait-timeout 300
+
 
 test:
-	cd backend && go test -v -race ./tests/...
+	docker compose --profile verify run --build --rm --entrypoint /app/integration.test verify -test.v=true
 
 lint:
 	cd backend && golangci-lint run ./...
 
 load:
-	k6 run k6/load-test.js
+	docker compose --profile load run --rm load
