@@ -12,7 +12,7 @@
 Sistem; frontend, backend, PostgreSQL 16 veritabanı ve simülatör (seed servisi) ile **tek bir komutla** ayağa kalkar:
 
 ```bash
-git clone <senin-repo-adresin> && cd siteyonet
+git clone https://github.com/gokdeniz001/ddo-case-gokdeniz-kilinc.git && cd ddo-case-gokdeniz-kilinc
 cp .env.example .env
 docker compose up --build
 ```
