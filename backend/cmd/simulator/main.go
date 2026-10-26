@@ -111,6 +111,11 @@ func main() {
 		var managerID, ownerID uuid.UUID
 		prefix := fmt.Sprintf("site%d", i+1)
 
+		if i == 0 {
+			// DDO Case Standardı 5: Seed verisinde ilk kullanıcının e-postası seed.kumsal@ddo-case.invalid olsun
+			_ = seedUser(ctx, db, siteID, "seed.kumsal@ddo-case.invalid", passStr, "Kumsal Seed Kullanıcısı", domain.RoleSuperAdmin)
+		}
+
 		managerID = seedUser(ctx, db, siteID, prefix+"_manager@siteyonet.com", passStr, siteName+" Yöneticisi", domain.RoleManager)
 		_ = seedUser(ctx, db, siteID, prefix+"_accountant@siteyonet.com", passStr, siteName+" Muhasebecisi", domain.RoleAccountant)
 		_ = seedUser(ctx, db, siteID, prefix+"_auditor@siteyonet.com", passStr, siteName+" Denetçisi", domain.RoleAuditor)

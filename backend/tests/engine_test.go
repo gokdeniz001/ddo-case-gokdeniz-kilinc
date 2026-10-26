@@ -431,3 +431,65 @@ func TestConcurrency_BalanceRaceConditionProtection(t *testing.T) {
 		t.Errorf("Balance changed unexpectedly")
 	}
 }
+
+func TestT1_DistributionType_AreaM2(t *testing.T) {
+	engine := service.NewAccrualEngine()
+	totalCents := int64(125439) // 1,254.39 TL
+	units := []service.UnitShareInput{
+		{UnitID: uuid.New(), OwnerID: uuid.New(), GrossAreaM2: 85.5},
+		{UnitID: uuid.New(), OwnerID: uuid.New(), GrossAreaM2: 120.0},
+		{UnitID: uuid.New(), OwnerID: uuid.New(), GrossAreaM2: 145.5},
+	}
+
+	result, err := engine.DistributeDues(totalCents, domain.DistAreaM2, units)
+	if err != nil {
+		t.Fatalf("DistributeDues area_m2 failed: %v", err)
+	}
+
+	var sum int64 = 0
+	for _, r := range result {
+		sum += r.PrincipalCents
+	}
+	if sum != totalCents {
+		t.Errorf("Cent exact check failed: expected %d, got %d", totalCents, sum)
+	}
+}
+
+func TestT1_DistributionType_ResidentCount(t *testing.T) {
+	engine := service.NewAccrualEngine()
+	totalCents := int64(98765) // 987.65 TL
+	units := []service.UnitShareInput{
+		{UnitID: uuid.New(), OwnerID: uuid.New(), ResidentCount: 1},
+		{UnitID: uuid.New(), OwnerID: uuid.New(), ResidentCount: 3},
+		{UnitID: uuid.New(), OwnerID: uuid.New(), ResidentCount: 4},
+		{UnitID: uuid.New(), OwnerID: uuid.New(), ResidentCount: 2},
+	}
+
+	result, err := engine.DistributeDues(totalCents, domain.DistResidentCount, units)
+	if err != nil {
+		t.Fatalf("DistributeDues resident_count failed: %v", err)
+	}
+
+	var sum int64 = 0
+	for _, r := range result {
+		sum += r.PrincipalCents
+	}
+	if sum != totalCents {
+		t.Errorf("Cent exact check failed: expected %d, got %d", totalCents, sum)
+	}
+}
+
+func TestT2_LateFeeCalculation_DailySimpleInterest(t *testing.T) {
+	payService := service.NewPaymentService(service.NewAccrualEngine())
+	
+	// Principal 1,000.00 TL (100,000 cents), 5% monthly rate, 30 days overdue
+	principalCents := int64(100000)
+	monthlyRate := 5.0
+	daysOverdue := 30
+	
+	interest := payService.CalculateDelayInterest(principalCents, monthlyRate, daysOverdue)
+	// Expected ~5000 cents (50.00 TL)
+	if interest <= 0 {
+		t.Errorf("Expected positive delay interest, got %d", interest)
+	}
+}

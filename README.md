@@ -318,3 +318,6 @@ En çok zorlandığım görevler **Görev 1 (Tahakkuk ve Paylaştırma Motoru �
   * Daire 2: 333.333 kuruş
   * Daire 3: 333.333 kuruş
   * **Toplam:** `333.334 + 333.333 + 333.333 = 1.000.000 kuruş (10.000,00 TL)` kuruşu kuruşuna denk olarak tamamlanmıştır. Kapıcı dairesi (`is_exempt = true`) dağıtımdan otomatik muaf tutulmuş ve ay ortasında el değiştiren dairede 10 gün / 20 gün oranında kuruş tamlığı korunarak paylaştırılmıştır.
+
+---
+DDO Case Kodu: KUMSAL-0c7cc1

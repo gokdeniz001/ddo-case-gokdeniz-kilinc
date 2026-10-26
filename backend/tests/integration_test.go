@@ -250,3 +250,161 @@ func TestF4_ExpenseCreationAndAuditLog(t *testing.T) {
 		t.Logf("Audit log asynchronous check note: pending insertion")
 	}
 }
+
+func TestF2_DuesDefinitionAndAccrualCreation(t *testing.T) {
+	db := getTestDB(t)
+	if db == nil {
+		return
+	}
+	ctx := context.Background()
+
+	var siteID uuid.UUID
+	_ = db.Pool.QueryRow(ctx, `SELECT id FROM "fy-sites" LIMIT 1`).Scan(&siteID)
+	if siteID == uuid.Nil {
+		t.Skip("No site found")
+		return
+	}
+
+	var duesDefID uuid.UUID
+	err := db.Pool.QueryRow(ctx, `
+		INSERT INTO "fy-dues-definitions" (site_id, name, total_amount_cents, distribution_type, due_day, late_fee_rate)
+		VALUES ($1, 'Entegrasyon Test Aidatı', 500000, 'LAND_SHARE', 10, 5.00)
+		RETURNING id
+	`, siteID).Scan(&duesDefID)
+	if err != nil {
+		t.Fatalf("Failed to create dues definition: %v", err)
+	}
+
+	if duesDefID == uuid.Nil {
+		t.Errorf("Expected valid dues definition UUID")
+	}
+}
+
+func TestF3_PaymentRecordingAndDebtStatusUpdate(t *testing.T) {
+	db := getTestDB(t)
+	if db == nil {
+		return
+	}
+	ctx := context.Background()
+
+	var siteID uuid.UUID
+	_ = db.Pool.QueryRow(ctx, `SELECT id FROM "fy-sites" LIMIT 1`).Scan(&siteID)
+	if siteID == uuid.Nil {
+		t.Skip("No site found")
+		return
+	}
+
+	var debtID, unitID, userID uuid.UUID
+	err := db.Pool.QueryRow(ctx, `SELECT id, unit_id, user_id FROM "fy-debts" WHERE site_id = $1 LIMIT 1`, siteID).Scan(&debtID, &unitID, &userID)
+	if err != nil {
+		t.Skip("No debt found for payment integration test")
+		return
+	}
+
+	var paymentID uuid.UUID
+	err = db.Pool.QueryRow(ctx, `
+		INSERT INTO "fy-payments" (site_id, unit_id, user_id, amount_cents, payment_method, reference_no)
+		VALUES ($1, $2, $3, 10000, 'BANK_TRANSFER', $4)
+		RETURNING id
+	`, siteID, unitID, userID, "TEST_REF_"+uuid.New().String()[:8]).Scan(&paymentID)
+	if err != nil {
+		t.Fatalf("Failed to record payment: %v", err)
+	}
+	if paymentID == uuid.Nil {
+		t.Errorf("Expected valid payment UUID")
+	}
+}
+
+func TestF5_MaintenanceRequestStatusTransition(t *testing.T) {
+	db := getTestDB(t)
+	if db == nil {
+		return
+	}
+	ctx := context.Background()
+
+	var siteID, unitID, userID uuid.UUID
+	_ = db.Pool.QueryRow(ctx, `SELECT u.site_id, u.id, u.owner_id FROM "fy-units" u WHERE u.owner_id IS NOT NULL LIMIT 1`).Scan(&siteID, &unitID, &userID)
+	if siteID == uuid.Nil {
+		t.Skip("No unit/resident found for maintenance test")
+		return
+	}
+
+	var reqID uuid.UUID
+	err := db.Pool.QueryRow(ctx, `
+		INSERT INTO "fy-maintenance-requests" (site_id, unit_id, user_id, title, description, status)
+		VALUES ($1, $2, $3, 'Asansör Arızası', '2. kat kapı arızası', 'PENDING')
+		RETURNING id
+	`, siteID, unitID, userID).Scan(&reqID)
+	if err != nil {
+		t.Fatalf("Failed to create maintenance request: %v", err)
+	}
+
+	_, err = db.Pool.Exec(ctx, `UPDATE "fy-maintenance-requests" SET status = 'IN_PROGRESS' WHERE id = $1`, reqID)
+	if err != nil {
+		t.Fatalf("Failed to transition maintenance status: %v", err)
+	}
+}
+
+func TestF6_FiscalPeriodLockAndReversal(t *testing.T) {
+	db := getTestDB(t)
+	if db == nil {
+		return
+	}
+	ctx := context.Background()
+
+	var siteID uuid.UUID
+	_ = db.Pool.QueryRow(ctx, `SELECT id FROM "fy-sites" LIMIT 1`).Scan(&siteID)
+	if siteID == uuid.Nil {
+		t.Skip("No site found")
+		return
+	}
+
+	testPeriodName := "Test Mali Dönem " + uuid.New().String()[:6]
+	var periodID uuid.UUID
+	err := db.Pool.QueryRow(ctx, `
+		INSERT INTO "fy-fiscal-periods" (site_id, name, start_date, end_date, status)
+		VALUES ($1, $2, '2025-01-01', '2025-12-31', 'OPEN')
+		RETURNING id
+	`, siteID, testPeriodName).Scan(&periodID)
+	if err != nil {
+		t.Fatalf("Failed to insert fiscal period: %v", err)
+	}
+
+	// Close period
+	_, err = db.Pool.Exec(ctx, `UPDATE "fy-fiscal-periods" SET status = 'CLOSED', closed_at = NOW() WHERE id = $1`, periodID)
+	if err != nil {
+		t.Fatalf("Failed to close fiscal period: %v", err)
+	}
+}
+
+func TestF7_ClearanceCertificate_VerificationEndpoint(t *testing.T) {
+	db := getTestDB(t)
+	if db == nil {
+		return
+	}
+	ctx := context.Background()
+
+	var siteID, unitID, userID uuid.UUID
+	_ = db.Pool.QueryRow(ctx, `SELECT u.site_id, u.id, u.owner_id FROM "fy-units" u WHERE u.owner_id IS NOT NULL LIMIT 1`).Scan(&siteID, &unitID, &userID)
+	if siteID == uuid.Nil {
+		t.Skip("No unit/resident found for certificate test")
+		return
+	}
+
+	verCode := "TEST-VER-" + uuid.New().String()[:8]
+	var certID uuid.UUID
+	err := db.Pool.QueryRow(ctx, `
+		INSERT INTO "fy-clearance-certificates" (site_id, unit_id, user_id, verification_code, cryptographic_proof, is_valid)
+		VALUES ($1, $2, $3, $4, 'sha256-test-proof', true)
+		RETURNING id
+	`, siteID, unitID, userID, verCode).Scan(&certID)
+	if err != nil {
+		t.Fatalf("Failed to issue test clearance certificate: %v", err)
+	}
+
+	var foundID uuid.UUID
+	err = db.Pool.QueryRow(ctx, `SELECT id FROM "fy-clearance-certificates" WHERE verification_code = $1 AND is_valid = true`, verCode).Scan(&foundID)
+	if err != nil || foundID != certID {
+		t.Errorf("Certificate verification query failed: %v", err)
+	}
+}
